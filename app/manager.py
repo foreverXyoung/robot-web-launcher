@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .config import LauncherConfig, ModuleConfig
+from .ros_monitor import RosTopicMonitor
 
 
 RUNNING_STATES = {"starting", "running", "stopping"}
@@ -37,6 +38,7 @@ class ProcessManager:
         }
         self.log_queues: set[asyncio.Queue[dict]] = set()
         self.lock = asyncio.Lock()
+        self.monitor = RosTopicMonitor(config)
         self.config.log_dir.mkdir(parents=True, exist_ok=True)
         self.config.state_dir.mkdir(parents=True, exist_ok=True)
 
@@ -215,33 +217,14 @@ class ProcessManager:
         await self.stop_many(module_ids)
 
     async def measure_sensor_rates(self) -> list[dict]:
-        tasks = []
-        task_meta = []
-        for module_id, module in self.config.modules.items():
-            if module.category != "sensor":
-                continue
-            for topic in module.monitor_topics:
-                tasks.append(self._measure_topic_rate(module_id, module, topic))
-                task_meta.append((module_id, module, topic))
-        if not tasks:
-            return []
-        raw_results = await asyncio.gather(*tasks, return_exceptions=True)
-        results = []
-        for result, (module_id, module, topic) in zip(raw_results, task_meta):
-            if isinstance(result, Exception):
-                results.append(
-                    {
-                        "module": module_id,
-                        "topic": topic,
-                        "domain_id": module.domain_id,
-                        "hz": None,
-                        "status": "error",
-                        "message": f"{type(result).__name__}: {result}",
-                    }
-                )
-            else:
-                results.append(result)
-        return results
+        return self.monitor.rates()
+
+    def monitor_status(self) -> dict:
+        return self.monitor.status()
+
+    def set_monitor_enabled(self, enabled: bool) -> dict:
+        self.monitor.set_enabled(enabled)
+        return self.monitor.status()
 
     async def _pipe_output(
         self,
@@ -302,70 +285,6 @@ class ProcessManager:
         script = "\n".join(source_lines)
         return ["bash", "-lc", script, "bash", *module.cmd]
 
-    async def _measure_topic_rate(self, module_id: str, module: ModuleConfig, topic: str) -> dict:
-        state = self.states[module_id]
-        if state.status not in {"starting", "running"}:
-            return {
-                "module": module_id,
-                "topic": topic,
-                "domain_id": module.domain_id,
-                "hz": None,
-                "status": "stopped",
-                "message": "module not running",
-            }
-
-        env = os.environ.copy()
-        if module.domain_id is not None:
-            env["ROS_DOMAIN_ID"] = str(module.domain_id)
-
-        script = ""
-        if module.setup:
-            script += f"cd {self._sh_quote(str(module.workdir))}\n"
-            script += f"source {self._sh_quote(module.setup)}\n"
-        script += 'exec "$@"'
-
-        try:
-            process = await asyncio.create_subprocess_exec(
-                "bash",
-                "-lc",
-                script,
-                "bash",
-                "ros2",
-                "topic",
-                "hz",
-                topic,
-                "--window",
-                "5",
-                cwd=str(module.workdir),
-                env=env,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.STDOUT,
-            )
-            try:
-                stdout, _ = await asyncio.wait_for(process.communicate(), timeout=4.0)
-            except TimeoutError:
-                process.kill()
-                stdout, _ = await process.communicate()
-            text = stdout.decode("utf-8", errors="replace")
-            hz = self._parse_ros2_topic_hz(text)
-            return {
-                "module": module_id,
-                "topic": topic,
-                "domain_id": module.domain_id,
-                "hz": hz,
-                "status": "ok" if hz is not None else "no_data",
-                "message": text.strip().splitlines()[-1] if text.strip() else "no output",
-            }
-        except Exception as exc:
-            return {
-                "module": module_id,
-                "topic": topic,
-                "domain_id": module.domain_id,
-                "hz": None,
-                "status": "error",
-                "message": f"{type(exc).__name__}: {exc}",
-            }
-
     def _expand_dependencies(self, module_ids: list[str]) -> list[str]:
         result: list[str] = []
         seen: set[str] = set()
@@ -414,10 +333,3 @@ class ProcessManager:
             return env.get(key, "")
 
         return pattern.sub(replace, value)
-
-    @staticmethod
-    def _parse_ros2_topic_hz(text: str) -> float | None:
-        match = re.search(r"average rate:\s*([0-9]+(?:\.[0-9]+)?)", text)
-        if not match:
-            return None
-        return float(match.group(1))

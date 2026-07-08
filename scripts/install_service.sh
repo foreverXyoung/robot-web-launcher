@@ -14,7 +14,7 @@ fi
 cd "${PROJECT_DIR}"
 
 echo "[1/5] Creating Python virtual environment..."
-"${PYTHON_BIN}" -m venv .venv
+"${PYTHON_BIN}" -m venv --system-site-packages .venv
 
 echo "[2/5] Installing Python dependencies..."
 .venv/bin/python -m pip install --upgrade pip
@@ -25,7 +25,7 @@ tmp_service="$(mktemp)"
 sed \
   -e "s#WorkingDirectory=/data/sinuo_project/robot_web_launcher#WorkingDirectory=${PROJECT_DIR}#g" \
   -e "s#Environment=ROBOT_LAUNCHER_CONFIG=/data/sinuo_project/robot_web_launcher/config/modules.yaml#Environment=ROBOT_LAUNCHER_CONFIG=${PROJECT_DIR}/config/modules.yaml#g" \
-  -e "s#ExecStart=/usr/bin/python3 -m uvicorn#ExecStart=${PROJECT_DIR}/.venv/bin/python -m uvicorn#g" \
+  -e "s#/usr/bin/python3 -m uvicorn#${PROJECT_DIR}/.venv/bin/python -m uvicorn#g" \
   "systemd/robot-web-launcher.service" > "${tmp_service}"
 
 echo "[4/5] Installing systemd service..."
@@ -40,4 +40,3 @@ sudo systemctl status "${SERVICE_NAME}" --no-pager
 
 echo
 echo "Done. Open http://<AGX_IP>:8080"
-

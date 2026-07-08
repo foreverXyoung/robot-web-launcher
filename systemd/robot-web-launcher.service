@@ -10,7 +10,7 @@ WorkingDirectory=/data/sinuo_project/robot_web_launcher
 Environment=PYTHONUNBUFFERED=1
 Environment=ROBOT_LAUNCHER_CONFIG=/data/sinuo_project/robot_web_launcher/config/modules.yaml
 Environment=ROBOT_LAUNCHER_AUTOSTART=0
-ExecStart=/usr/bin/python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8080 --workers 1
+ExecStart=/bin/bash -lc 'source /opt/ros/humble/setup.bash && exec /usr/bin/python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8080 --workers 1'
 Restart=always
 RestartSec=3
 

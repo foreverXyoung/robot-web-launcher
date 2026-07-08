@@ -52,6 +52,8 @@
       <div class="toolbar">
         <button onclick="startSelected()">启动勾选</button>
         <button class="stop" onclick="stopSelected()">关闭勾选</button>
+        <button id="monitorToggle" class="secondary" onclick="toggleMonitor()">关闭频率监测</button>
+        <span id="monitorState" class="muted">监测状态读取中...</span>
         <button class="secondary" onclick="selectAutostart()">勾选自启动</button>
         <button class="secondary" onclick="selectAll()">全选</button>
         <button class="secondary" onclick="clearSelection()">清空</button>
@@ -87,6 +89,7 @@
     let modules = [];
     let categories = [];
     let rates = [];
+    let monitorStatus = { enabled: true, started: false, error: null };
     const selected = new Set();
     const categoryLabels = { sensor: "传感器驱动", algorithm: "算法模块" };
 
@@ -101,6 +104,7 @@
 
     async function refreshAll() {
       await loadModules();
+      await loadMonitorStatus();
       await loadSensorRates();
     }
 
@@ -119,6 +123,34 @@
         rates = [];
       }
       renderModules();
+    }
+
+    async function loadMonitorStatus() {
+      monitorStatus = await api("/api/monitor");
+      renderMonitorStatus();
+    }
+
+    async function toggleMonitor() {
+      monitorStatus = await api("/api/monitor", {
+        method: "POST",
+        body: JSON.stringify({ enabled: !monitorStatus.enabled }),
+      });
+      if (!monitorStatus.enabled) rates = [];
+      renderMonitorStatus();
+      renderModules();
+    }
+
+    function renderMonitorStatus() {
+      const button = document.getElementById("monitorToggle");
+      const state = document.getElementById("monitorState");
+      button.textContent = monitorStatus.enabled ? "关闭频率监测" : "开启频率监测";
+      if (!monitorStatus.enabled) {
+        state.textContent = "频率监测已关闭";
+      } else if (monitorStatus.error) {
+        state.textContent = `频率监测异常：${monitorStatus.error}`;
+      } else {
+        state.textContent = `频率监测运行中，窗口 ${monitorStatus.window_sec}s`;
+      }
     }
 
     function renderCategories() {

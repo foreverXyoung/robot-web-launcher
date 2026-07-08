@@ -6,7 +6,7 @@ stop_timeout_sec: 8
 
 modules:
   lidar:
-    name: LiDAR MID360
+    name: MID360
     category: sensor
     domain_id: 10
     workdir: /data/sinuo_project/mid_ws
@@ -21,7 +21,7 @@ modules:
     monitor_topics: ["/livox/lidar"]
 
   imu:
-    name: Hipnuc IMU
+    name: N300pro IMU
     category: sensor
     domain_id: 10
     workdir: /data/sinuo_project/n300_pro_ws
@@ -71,7 +71,7 @@ modules:
     health_nodes: ["/robot_controller"]
 
   depth_camera:
-    name: Orbbec Gemini 330
+    name: RGB-D
     category: sensor
     domain_id: 20
     workdir: /data/sinuo_project/orb_ws

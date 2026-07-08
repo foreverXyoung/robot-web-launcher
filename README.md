@@ -12,6 +12,7 @@
 - 支持 Conda 环境中的 Python 检测脚本
 - 使用 Linux 进程组停止 ROS launch 及其子进程
 - WebSocket 实时日志
+- 常驻 rclpy 传感器 topic 频率监测，默认开启，可在页面关闭
 - systemd 开机自启模板
 
 ## 安装
@@ -34,6 +35,8 @@ python3 -m pip install -r requirements.txt
 ```bash
 ./scripts/run_dev.sh
 ```
+
+`run_dev.sh` 会自动尝试 source `/opt/ros/humble/setup.bash`，这样后端的常驻 rclpy 监测器可以导入 ROS 2 Python 包。
 
 浏览器访问：
 
@@ -107,3 +110,4 @@ conda_sh: /home/nvidia/anaconda3/etc/profile.d/conda.sh
 3. 自动启动时建议关闭 RViz，比如 `rviz:=false`。
 4. 串口设备建议用 udev 固定名称，不要长期依赖 `/dev/ttyUSB0`。
 5. `system_real_robot.launch` 建议改名为 `system_real_robot.launch.py`，配置里已经按 `.launch.py` 写了。
+6. 频率监测需要后端 Python 能导入 `rclpy`。本项目的开发脚本和 systemd 模板会 source `/opt/ros/humble/setup.bash`；如果你的 ROS 安装路径不同，需要同步修改脚本。

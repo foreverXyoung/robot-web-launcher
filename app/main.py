@@ -25,10 +25,20 @@ class ModuleSelection(BaseModel):
     modules: list[str]
 
 
+class MonitorToggle(BaseModel):
+    enabled: bool
+
+
 @app.on_event("startup")
 async def on_startup() -> None:
+    manager.set_monitor_enabled(True)
     if os.environ.get("ROBOT_LAUNCHER_AUTOSTART", "0") == "1":
         await manager.autostart()
+
+
+@app.on_event("shutdown")
+async def on_shutdown() -> None:
+    manager.set_monitor_enabled(False)
 
 
 @app.get("/")
@@ -52,6 +62,16 @@ async def sensor_rates() -> list[dict]:
         return await manager.measure_sensor_rates()
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/monitor")
+async def monitor_status() -> dict:
+    return manager.monitor_status()
+
+
+@app.post("/api/monitor")
+async def set_monitor(toggle: MonitorToggle) -> dict:
+    return manager.set_monitor_enabled(toggle.enabled)
 
 
 @app.post("/api/modules/{module_id}/start")

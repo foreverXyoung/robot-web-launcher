@@ -167,7 +167,7 @@
       return items.map(r => {
         const topic = escapeHtml(r.topic);
         if (r.hz === null || r.hz === undefined) {
-          return `<div class="rate-bad">${topic}: -- Hz</div>`;
+          return `<div class="rate-bad" title="${escapeHtml(r.message || '')}">${topic}: -- Hz</div>`;
         }
         return `<div class="rate-ok">${topic}: ${Number(r.hz).toFixed(2)} Hz</div>`;
       }).join("");

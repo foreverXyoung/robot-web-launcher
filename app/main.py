@@ -48,7 +48,10 @@ async def list_categories() -> list[dict]:
 
 @app.get("/api/sensor-rates")
 async def sensor_rates() -> list[dict]:
-    return await manager.measure_sensor_rates()
+    try:
+        return await manager.measure_sensor_rates()
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/api/modules/{module_id}/start")

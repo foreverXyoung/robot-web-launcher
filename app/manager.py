@@ -216,14 +216,32 @@ class ProcessManager:
 
     async def measure_sensor_rates(self) -> list[dict]:
         tasks = []
+        task_meta = []
         for module_id, module in self.config.modules.items():
             if module.category != "sensor":
                 continue
             for topic in module.monitor_topics:
                 tasks.append(self._measure_topic_rate(module_id, module, topic))
+                task_meta.append((module_id, module, topic))
         if not tasks:
             return []
-        return await asyncio.gather(*tasks)
+        raw_results = await asyncio.gather(*tasks, return_exceptions=True)
+        results = []
+        for result, (module_id, module, topic) in zip(raw_results, task_meta):
+            if isinstance(result, Exception):
+                results.append(
+                    {
+                        "module": module_id,
+                        "topic": topic,
+                        "domain_id": module.domain_id,
+                        "hz": None,
+                        "status": "error",
+                        "message": f"{type(result).__name__}: {result}",
+                    }
+                )
+            else:
+                results.append(result)
+        return results
 
     async def _pipe_output(
         self,
@@ -338,14 +356,14 @@ class ProcessManager:
                 "status": "ok" if hz is not None else "no_data",
                 "message": text.strip().splitlines()[-1] if text.strip() else "no output",
             }
-        except FileNotFoundError:
+        except Exception as exc:
             return {
                 "module": module_id,
                 "topic": topic,
                 "domain_id": module.domain_id,
                 "hz": None,
                 "status": "error",
-                "message": "bash or ros2 not found",
+                "message": f"{type(exc).__name__}: {exc}",
             }
 
     def _expand_dependencies(self, module_ids: list[str]) -> list[str]:

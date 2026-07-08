@@ -1,0 +1,18 @@
+[Unit]
+Description=Robot Web Launcher
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=nvidia
+WorkingDirectory=/data/sinuo_project/robot_web_launcher
+Environment=PYTHONUNBUFFERED=1
+Environment=ROBOT_LAUNCHER_CONFIG=/data/sinuo_project/robot_web_launcher/config/modules.yaml
+Environment=ROBOT_LAUNCHER_AUTOSTART=0
+ExecStart=/usr/bin/python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8080 --workers 1
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

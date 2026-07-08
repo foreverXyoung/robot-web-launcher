@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Robot Web Launcher</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, "Microsoft YaHei", sans-serif; }
+    body { margin: 0; background: #0b1020; color: #e9eefc; }
+    header { padding: 18px 24px; background: #111936; display: flex; justify-content: space-between; align-items: center; }
+    h1 { font-size: 20px; margin: 0; }
+    main { padding: 20px; display: grid; grid-template-columns: minmax(760px, 1.2fr) minmax(420px, 0.8fr); gap: 18px; }
+    .card { background: #121a33; border: 1px solid #273254; border-radius: 14px; overflow: hidden; }
+    .toolbar { padding: 12px; display: flex; gap: 8px; flex-wrap: wrap; border-bottom: 1px solid #273254; }
+    button { border: 0; border-radius: 9px; padding: 8px 12px; color: white; background: #2c63ff; cursor: pointer; }
+    button.stop { background: #d94b5d; }
+    button.restart { background: #7a5cff; }
+    button.secondary { background: #31405f; }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { padding: 10px; border-bottom: 1px solid #24304f; text-align: left; vertical-align: middle; }
+    th { color: #aab8df; font-weight: 600; }
+    tr:hover { background: #172140; }
+    .status { padding: 3px 8px; border-radius: 999px; background: #37415e; }
+    .running, .starting { background: #176b48; color: #c7ffe5; }
+    .crashed { background: #7c2333; color: #ffd5dc; }
+    .stopping { background: #75551b; color: #ffe7b1; }
+    .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+    #logs { height: calc(100vh - 165px); overflow: auto; padding: 12px; background: #060912; font-family: ui-monospace, Consolas, monospace; font-size: 13px; white-space: pre-wrap; }
+    .log-line { margin: 0 0 4px; }
+    .muted { color: #9aa8ce; }
+    .module { color: #89b4ff; }
+    @media (max-width: 1100px) { main { grid-template-columns: 1fr; } #logs { height: 420px; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>摘钩机器人 ROS2 模块控制台</h1>
+    <div class="muted" id="wsState">连接中...</div>
+  </header>
+
+  <main>
+    <section class="card">
+      <div class="toolbar">
+        <button onclick="startSelected()">启动勾选</button>
+        <button class="stop" onclick="stopSelected()">关闭勾选</button>
+        <button class="secondary" onclick="selectAutostart()">勾选自启动</button>
+        <button class="secondary" onclick="selectAll()">全选</button>
+        <button class="secondary" onclick="clearSelection()">清空</button>
+        <button class="secondary" onclick="loadModules()">刷新状态</button>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th><input type="checkbox" onchange="toggleAll(this.checked)" /></th>
+            <th>模块</th>
+            <th>Domain</th>
+            <th>状态</th>
+            <th>PID</th>
+            <th>依赖</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="moduleRows"></tbody>
+      </table>
+    </section>
+
+    <section class="card">
+      <div class="toolbar">
+        <button class="secondary" onclick="clearLogs()">清空日志</button>
+      </div>
+      <div id="logs"></div>
+    </section>
+  </main>
+
+  <script>
+    let modules = [];
+    const selected = new Set();
+
+    async function api(path, options = {}) {
+      const res = await fetch(path, {
+        headers: { "Content-Type": "application/json" },
+        ...options,
+      });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    }
+
+    async function loadModules() {
+      modules = await api("/api/modules");
+      renderModules();
+    }
+
+    function renderModules() {
+      const tbody = document.getElementById("moduleRows");
+      tbody.innerHTML = "";
+      for (const m of modules) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td><input type="checkbox" ${selected.has(m.id) ? "checked" : ""} onchange="setSelected('${m.id}', this.checked)" /></td>
+          <td><div>${m.name}</div><div class="muted">${m.id}</div></td>
+          <td>${m.domain_id ?? "-"}</td>
+          <td><span class="status ${m.status}">${m.status}</span></td>
+          <td>${m.pid ?? "-"}</td>
+          <td class="muted">${(m.depends_on || []).join(", ") || "-"}</td>
+          <td class="actions">
+            <button onclick="startOne('${m.id}')">启动</button>
+            <button class="stop" onclick="stopOne('${m.id}')">停止</button>
+            <button class="restart" onclick="restartOne('${m.id}')">重启</button>
+          </td>`;
+        tbody.appendChild(tr);
+      }
+    }
+
+    function setSelected(id, checked) {
+      checked ? selected.add(id) : selected.delete(id);
+    }
+    function toggleAll(checked) {
+      selected.clear();
+      if (checked) modules.forEach(m => selected.add(m.id));
+      renderModules();
+    }
+    function selectAll() { toggleAll(true); }
+    function clearSelection() { selected.clear(); renderModules(); }
+    function selectAutostart() {
+      selected.clear();
+      modules.filter(m => m.autostart).forEach(m => selected.add(m.id));
+      renderModules();
+    }
+
+    async function startOne(id) { await api(`/api/modules/${id}/start`, { method: "POST" }); await loadModules(); }
+    async function stopOne(id) { await api(`/api/modules/${id}/stop`, { method: "POST" }); await loadModules(); }
+    async function restartOne(id) { await api(`/api/modules/${id}/restart`, { method: "POST" }); await loadModules(); }
+    async function startSelected() {
+      await api("/api/start-selected", { method: "POST", body: JSON.stringify({ modules: [...selected] }) });
+      await loadModules();
+    }
+    async function stopSelected() {
+      await api("/api/stop-selected", { method: "POST", body: JSON.stringify({ modules: [...selected] }) });
+      await loadModules();
+    }
+
+    function clearLogs() { document.getElementById("logs").innerHTML = ""; }
+    function appendLog(payload) {
+      const logs = document.getElementById("logs");
+      const div = document.createElement("div");
+      div.className = "log-line";
+      div.innerHTML = `<span class="muted">${payload.time}</span> <span class="module">[${payload.module}]</span> ${escapeHtml(payload.message)}`;
+      logs.appendChild(div);
+      while (logs.children.length > 1000) logs.removeChild(logs.firstChild);
+      logs.scrollTop = logs.scrollHeight;
+    }
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+
+    function connectWs() {
+      const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/events`);
+      ws.onopen = () => document.getElementById("wsState").textContent = "实时日志已连接";
+      ws.onmessage = (ev) => {
+        const payload = JSON.parse(ev.data);
+        appendLog(payload);
+        loadModules();
+      };
+      ws.onclose = () => {
+        document.getElementById("wsState").textContent = "连接断开，重连中...";
+        setTimeout(connectWs, 1500);
+      };
+    }
+
+    loadModules();
+    connectWs();
+  </script>
+</body>
+</html>

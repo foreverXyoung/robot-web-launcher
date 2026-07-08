@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Runtime files generated on the robot
+runtime/
+*.log
+*.pid
+
+# Local overrides
+.env
+config/modules.local.yaml
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+

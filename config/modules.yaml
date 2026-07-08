@@ -7,6 +7,7 @@ stop_timeout_sec: 8
 modules:
   lidar:
     name: LiDAR MID360
+    category: sensor
     domain_id: 10
     workdir: /data/sinuo_project/mid_ws
     setup: install/setup.bash
@@ -17,9 +18,11 @@ modules:
     restart_on_crash: true
     startup_delay: 3
     health_nodes: ["/livox_lidar_publisher"]
+    monitor_topics: ["/livox/lidar"]
 
   imu:
     name: Hipnuc IMU
+    category: sensor
     domain_id: 10
     workdir: /data/sinuo_project/n300_pro_ws
     setup: install/setup.bash
@@ -28,9 +31,11 @@ modules:
     restart_on_crash: true
     startup_delay: 2
     health_nodes: ["/IMU_publisher"]
+    monitor_topics: ["/IMU_data"]
 
   g90_rtk:
     name: G90 RTK/GPS
+    category: sensor
     domain_id: 10
     workdir: /data/sinuo_project/G90_ws
     setup: install/setup.bash
@@ -38,9 +43,11 @@ modules:
     autostart: true
     restart_on_crash: true
     startup_delay: 2
+    monitor_topics: ["/fix"]
 
   fast_lio:
     name: FAST-LIO
+    category: algorithm
     domain_id: 10
     workdir: /data/sinuo_project/mid_ws
     setup: install/setup.bash
@@ -65,6 +72,7 @@ modules:
 
   depth_camera:
     name: Orbbec Gemini 330
+    category: sensor
     domain_id: 20
     workdir: /data/sinuo_project/orb_ws
     setup: install/setup.bash
@@ -90,6 +98,7 @@ modules:
     autostart: true
     restart_on_crash: true
     startup_delay: 3
+    monitor_topics: ["/camera/color/image_raw"]
 
   domain_bridge:
     name: 域桥 plus

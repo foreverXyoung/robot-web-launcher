@@ -11,6 +11,7 @@ import yaml
 class ModuleConfig:
     id: str
     name: str
+    category: str
     workdir: Path
     cmd: list[str]
     env: dict[str, str] = field(default_factory=dict)
@@ -24,6 +25,7 @@ class ModuleConfig:
     startup_delay: float = 0.0
     health_nodes: list[str] = field(default_factory=list)
     health_topics: list[str] = field(default_factory=list)
+    monitor_topics: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -66,6 +68,7 @@ def load_config(path: str | Path) -> LauncherConfig:
         modules[module_id] = ModuleConfig(
             id=module_id,
             name=str(item.get("name", module_id)),
+            category=str(item.get("category", "algorithm")),
             domain_id=item.get("domain_id"),
             workdir=Path(item["workdir"]).expanduser(),
             env={str(k): str(v) for k, v in (item.get("env") or {}).items()},
@@ -79,6 +82,7 @@ def load_config(path: str | Path) -> LauncherConfig:
             startup_delay=float(item.get("startup_delay", 0.0)),
             health_nodes=_as_str_list(item.get("health_nodes"), f"{module_id}.health_nodes"),
             health_topics=_as_str_list(item.get("health_topics"), f"{module_id}.health_topics"),
+            monitor_topics=_as_str_list(item.get("monitor_topics"), f"{module_id}.monitor_topics"),
         )
 
     for module in modules.values():

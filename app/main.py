@@ -41,6 +41,16 @@ async def list_modules() -> list[dict]:
     return manager.list_modules()
 
 
+@app.get("/api/categories")
+async def list_categories() -> list[dict]:
+    return manager.list_categories()
+
+
+@app.get("/api/sensor-rates")
+async def sensor_rates() -> list[dict]:
+    return await manager.measure_sensor_rates()
+
+
 @app.post("/api/modules/{module_id}/start")
 async def start_module(module_id: str) -> dict:
     try:
@@ -78,6 +88,24 @@ async def start_selected(selection: ModuleSelection) -> dict:
 async def stop_selected(selection: ModuleSelection) -> dict:
     try:
         await manager.stop_many(selection.modules)
+        return {"ok": True}
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/categories/{category}/start")
+async def start_category(category: str) -> dict:
+    try:
+        await manager.start_category(category)
+        return {"ok": True}
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/categories/{category}/stop")
+async def stop_category(category: str) -> dict:
+    try:
+        await manager.stop_category(category)
         return {"ok": True}
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

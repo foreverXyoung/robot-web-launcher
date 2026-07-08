@@ -9,9 +9,12 @@
     body { margin: 0; background: #0b1020; color: #e9eefc; }
     header { padding: 18px 24px; background: #111936; display: flex; justify-content: space-between; align-items: center; }
     h1 { font-size: 20px; margin: 0; }
-    main { padding: 20px; display: grid; grid-template-columns: minmax(760px, 1.2fr) minmax(420px, 0.8fr); gap: 18px; }
+    main { padding: 20px; display: grid; grid-template-columns: minmax(820px, 1.2fr) minmax(420px, 0.8fr); gap: 18px; }
     .card { background: #121a33; border: 1px solid #273254; border-radius: 14px; overflow: hidden; }
     .toolbar { padding: 12px; display: flex; gap: 8px; flex-wrap: wrap; border-bottom: 1px solid #273254; }
+    .category-bar { padding: 12px; display: flex; gap: 10px; flex-wrap: wrap; border-bottom: 1px solid #273254; background: #0f1730; }
+    .category-card { border: 1px solid #2b375c; border-radius: 12px; padding: 10px; min-width: 210px; background: #151f3d; }
+    .category-title { font-weight: 700; margin-bottom: 8px; }
     button { border: 0; border-radius: 9px; padding: 8px 12px; color: white; background: #2c63ff; cursor: pointer; }
     button.stop { background: #d94b5d; }
     button.restart { background: #7a5cff; }
@@ -21,16 +24,20 @@
     th, td { padding: 10px; border-bottom: 1px solid #24304f; text-align: left; vertical-align: middle; }
     th { color: #aab8df; font-weight: 600; }
     tr:hover { background: #172140; }
-    .status { padding: 3px 8px; border-radius: 999px; background: #37415e; }
+    .status, .pill { padding: 3px 8px; border-radius: 999px; background: #37415e; display: inline-block; }
     .running, .starting { background: #176b48; color: #c7ffe5; }
     .crashed { background: #7c2333; color: #ffd5dc; }
     .stopping { background: #75551b; color: #ffe7b1; }
+    .sensor { background: #1d5f78; color: #d8f7ff; }
+    .algorithm { background: #4b4775; color: #eee8ff; }
+    .rate-ok { color: #8dffc5; }
+    .rate-bad { color: #ffb1bd; }
     .actions { display: flex; gap: 6px; flex-wrap: wrap; }
     #logs { height: calc(100vh - 165px); overflow: auto; padding: 12px; background: #060912; font-family: ui-monospace, Consolas, monospace; font-size: 13px; white-space: pre-wrap; }
     .log-line { margin: 0 0 4px; }
     .muted { color: #9aa8ce; }
     .module { color: #89b4ff; }
-    @media (max-width: 1100px) { main { grid-template-columns: 1fr; } #logs { height: 420px; } }
+    @media (max-width: 1180px) { main { grid-template-columns: 1fr; } #logs { height: 420px; } }
   </style>
 </head>
 <body>
@@ -41,21 +48,24 @@
 
   <main>
     <section class="card">
+      <div class="category-bar" id="categoryBar"></div>
       <div class="toolbar">
         <button onclick="startSelected()">启动勾选</button>
         <button class="stop" onclick="stopSelected()">关闭勾选</button>
         <button class="secondary" onclick="selectAutostart()">勾选自启动</button>
         <button class="secondary" onclick="selectAll()">全选</button>
         <button class="secondary" onclick="clearSelection()">清空</button>
-        <button class="secondary" onclick="loadModules()">刷新状态</button>
+        <button class="secondary" onclick="refreshAll()">刷新状态/频率</button>
       </div>
       <table>
         <thead>
           <tr>
             <th><input type="checkbox" onchange="toggleAll(this.checked)" /></th>
             <th>模块</th>
+            <th>分类</th>
             <th>Domain</th>
             <th>状态</th>
+            <th>频率</th>
             <th>PID</th>
             <th>依赖</th>
             <th>操作</th>
@@ -75,7 +85,10 @@
 
   <script>
     let modules = [];
+    let categories = [];
+    let rates = [];
     const selected = new Set();
+    const categoryLabels = { sensor: "传感器驱动", algorithm: "算法模块" };
 
     async function api(path, options = {}) {
       const res = await fetch(path, {
@@ -86,9 +99,43 @@
       return res.json();
     }
 
+    async function refreshAll() {
+      await loadModules();
+      await loadSensorRates();
+    }
+
     async function loadModules() {
       modules = await api("/api/modules");
+      categories = await api("/api/categories");
+      renderCategories();
       renderModules();
+    }
+
+    async function loadSensorRates() {
+      try {
+        rates = await api("/api/sensor-rates");
+      } catch (e) {
+        appendLog({ time: new Date().toLocaleTimeString(), module: "system", message: `频率刷新失败: ${e}` });
+        rates = [];
+      }
+      renderModules();
+    }
+
+    function renderCategories() {
+      const bar = document.getElementById("categoryBar");
+      bar.innerHTML = "";
+      for (const c of categories) {
+        const div = document.createElement("div");
+        div.className = "category-card";
+        div.innerHTML = `
+          <div class="category-title">${c.name} <span class="muted">(${c.modules.length})</span></div>
+          <div class="actions">
+            <button onclick="startCategory('${c.id}')">启动此分类</button>
+            <button class="stop" onclick="stopCategory('${c.id}')">停止此分类</button>
+            <button class="secondary" onclick="selectCategory('${c.id}')">勾选此分类</button>
+          </div>`;
+        bar.appendChild(div);
+      }
     }
 
     function renderModules() {
@@ -98,9 +145,11 @@
         const tr = document.createElement("tr");
         tr.innerHTML = `
           <td><input type="checkbox" ${selected.has(m.id) ? "checked" : ""} onchange="setSelected('${m.id}', this.checked)" /></td>
-          <td><div>${m.name}</div><div class="muted">${m.id}</div></td>
+          <td><div>${escapeHtml(m.name)}</div><div class="muted">${m.id}</div></td>
+          <td><span class="pill ${m.category}">${categoryLabels[m.category] || m.category}</span></td>
           <td>${m.domain_id ?? "-"}</td>
           <td><span class="status ${m.status}">${m.status}</span></td>
+          <td>${formatRates(m.id)}</td>
           <td>${m.pid ?? "-"}</td>
           <td class="muted">${(m.depends_on || []).join(", ") || "-"}</td>
           <td class="actions">
@@ -110,6 +159,18 @@
           </td>`;
         tbody.appendChild(tr);
       }
+    }
+
+    function formatRates(moduleId) {
+      const items = rates.filter(r => r.module === moduleId);
+      if (items.length === 0) return '<span class="muted">-</span>';
+      return items.map(r => {
+        const topic = escapeHtml(r.topic);
+        if (r.hz === null || r.hz === undefined) {
+          return `<div class="rate-bad">${topic}: -- Hz</div>`;
+        }
+        return `<div class="rate-ok">${topic}: ${Number(r.hz).toFixed(2)} Hz</div>`;
+      }).join("");
     }
 
     function setSelected(id, checked) {
@@ -127,17 +188,24 @@
       modules.filter(m => m.autostart).forEach(m => selected.add(m.id));
       renderModules();
     }
+    function selectCategory(category) {
+      selected.clear();
+      modules.filter(m => m.category === category).forEach(m => selected.add(m.id));
+      renderModules();
+    }
 
-    async function startOne(id) { await api(`/api/modules/${id}/start`, { method: "POST" }); await loadModules(); }
-    async function stopOne(id) { await api(`/api/modules/${id}/stop`, { method: "POST" }); await loadModules(); }
-    async function restartOne(id) { await api(`/api/modules/${id}/restart`, { method: "POST" }); await loadModules(); }
+    async function startOne(id) { await api(`/api/modules/${id}/start`, { method: "POST" }); await refreshAll(); }
+    async function stopOne(id) { await api(`/api/modules/${id}/stop`, { method: "POST" }); await refreshAll(); }
+    async function restartOne(id) { await api(`/api/modules/${id}/restart`, { method: "POST" }); await refreshAll(); }
+    async function startCategory(category) { await api(`/api/categories/${category}/start`, { method: "POST" }); await refreshAll(); }
+    async function stopCategory(category) { await api(`/api/categories/${category}/stop`, { method: "POST" }); await refreshAll(); }
     async function startSelected() {
       await api("/api/start-selected", { method: "POST", body: JSON.stringify({ modules: [...selected] }) });
-      await loadModules();
+      await refreshAll();
     }
     async function stopSelected() {
       await api("/api/stop-selected", { method: "POST", body: JSON.stringify({ modules: [...selected] }) });
-      await loadModules();
+      await refreshAll();
     }
 
     function clearLogs() { document.getElementById("logs").innerHTML = ""; }
@@ -168,8 +236,9 @@
       };
     }
 
-    loadModules();
+    refreshAll();
     connectWs();
+    setInterval(loadSensorRates, 5000);
   </script>
 </body>
 </html>

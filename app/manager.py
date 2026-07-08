@@ -45,15 +45,31 @@ class ProcessManager:
         for module_id, module in self.config.modules.items():
             item = asdict(self.states[module_id])
             item.update(
+                category=module.category,
                 domain_id=module.domain_id,
                 autostart=module.autostart,
                 restart_on_crash=module.restart_on_crash,
                 depends_on=module.depends_on,
                 health_nodes=module.health_nodes,
                 health_topics=module.health_topics,
+                monitor_topics=module.monitor_topics,
             )
             result.append(item)
         return result
+
+    def list_categories(self) -> list[dict]:
+        categories: dict[str, dict] = {}
+        labels = {
+            "sensor": "传感器驱动",
+            "algorithm": "算法模块",
+        }
+        for module_id, module in self.config.modules.items():
+            item = categories.setdefault(
+                module.category,
+                {"id": module.category, "name": labels.get(module.category, module.category), "modules": []},
+            )
+            item["modules"].append(module_id)
+        return list(categories.values())
 
     def get_state(self, module_id: str) -> dict:
         self._require_module(module_id)
@@ -182,6 +198,33 @@ class ProcessManager:
         await self.stop(module_id)
         return await self.start(module_id)
 
+    async def start_category(self, category: str) -> None:
+        module_ids = [
+            module_id
+            for module_id, module in self.config.modules.items()
+            if module.category == category
+        ]
+        await self.start_many(module_ids)
+
+    async def stop_category(self, category: str) -> None:
+        module_ids = [
+            module_id
+            for module_id, module in self.config.modules.items()
+            if module.category == category
+        ]
+        await self.stop_many(module_ids)
+
+    async def measure_sensor_rates(self) -> list[dict]:
+        tasks = []
+        for module_id, module in self.config.modules.items():
+            if module.category != "sensor":
+                continue
+            for topic in module.monitor_topics:
+                tasks.append(self._measure_topic_rate(module_id, module, topic))
+        if not tasks:
+            return []
+        return await asyncio.gather(*tasks)
+
     async def _pipe_output(
         self,
         module_id: str,
@@ -241,6 +284,70 @@ class ProcessManager:
         script = "\n".join(source_lines)
         return ["bash", "-lc", script, "bash", *module.cmd]
 
+    async def _measure_topic_rate(self, module_id: str, module: ModuleConfig, topic: str) -> dict:
+        state = self.states[module_id]
+        if state.status not in {"starting", "running"}:
+            return {
+                "module": module_id,
+                "topic": topic,
+                "domain_id": module.domain_id,
+                "hz": None,
+                "status": "stopped",
+                "message": "module not running",
+            }
+
+        env = os.environ.copy()
+        if module.domain_id is not None:
+            env["ROS_DOMAIN_ID"] = str(module.domain_id)
+
+        script = ""
+        if module.setup:
+            script += f"cd {self._sh_quote(str(module.workdir))}\n"
+            script += f"source {self._sh_quote(module.setup)}\n"
+        script += 'exec "$@"'
+
+        try:
+            process = await asyncio.create_subprocess_exec(
+                "bash",
+                "-lc",
+                script,
+                "bash",
+                "ros2",
+                "topic",
+                "hz",
+                topic,
+                "--window",
+                "5",
+                cwd=str(module.workdir),
+                env=env,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+            )
+            try:
+                stdout, _ = await asyncio.wait_for(process.communicate(), timeout=4.0)
+            except TimeoutError:
+                process.kill()
+                stdout, _ = await process.communicate()
+            text = stdout.decode("utf-8", errors="replace")
+            hz = self._parse_ros2_topic_hz(text)
+            return {
+                "module": module_id,
+                "topic": topic,
+                "domain_id": module.domain_id,
+                "hz": hz,
+                "status": "ok" if hz is not None else "no_data",
+                "message": text.strip().splitlines()[-1] if text.strip() else "no output",
+            }
+        except FileNotFoundError:
+            return {
+                "module": module_id,
+                "topic": topic,
+                "domain_id": module.domain_id,
+                "hz": None,
+                "status": "error",
+                "message": "bash or ros2 not found",
+            }
+
     def _expand_dependencies(self, module_ids: list[str]) -> list[str]:
         result: list[str] = []
         seen: set[str] = set()
@@ -289,3 +396,10 @@ class ProcessManager:
             return env.get(key, "")
 
         return pattern.sub(replace, value)
+
+    @staticmethod
+    def _parse_ros2_topic_hz(text: str) -> float | None:
+        match = re.search(r"average rate:\s*([0-9]+(?:\.[0-9]+)?)", text)
+        if not match:
+            return None
+        return float(match.group(1))

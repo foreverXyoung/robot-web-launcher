@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import signal
 from dataclasses import asdict, dataclass
 from datetime import datetime
@@ -108,6 +109,8 @@ class ProcessManager:
             env = os.environ.copy()
             if module.domain_id is not None:
                 env["ROS_DOMAIN_ID"] = str(module.domain_id)
+            for key, value in module.env.items():
+                env[key] = self._expand_env_value(value, env)
             env["PYTHONUNBUFFERED"] = "1"
 
             state.status = "starting"
@@ -276,3 +279,13 @@ class ProcessManager:
     @staticmethod
     def _sh_quote(value: str) -> str:
         return "'" + value.replace("'", "'\"'\"'") + "'"
+
+    @staticmethod
+    def _expand_env_value(value: str, env: dict[str, str]) -> str:
+        pattern = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)")
+
+        def replace(match: re.Match[str]) -> str:
+            key = match.group(1) or match.group(2)
+            return env.get(key, "")
+
+        return pattern.sub(replace, value)

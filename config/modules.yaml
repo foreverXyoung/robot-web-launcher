@@ -10,6 +10,8 @@ modules:
     domain_id: 10
     workdir: /data/sinuo_project/mid_ws
     setup: install/setup.bash
+    env:
+      LD_LIBRARY_PATH: /data/sinuo_project/mid_ws/src/livox_ros_driver2/Livox-SDK2/lib/arm64:${LD_LIBRARY_PATH}
     cmd: ["ros2", "launch", "livox_ros_driver2", "msg_MID360_launch.py"]
     autostart: true
     restart_on_crash: true

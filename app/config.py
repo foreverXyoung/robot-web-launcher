@@ -13,6 +13,7 @@ class ModuleConfig:
     name: str
     workdir: Path
     cmd: list[str]
+    env: dict[str, str] = field(default_factory=dict)
     domain_id: int | None = None
     setup: str | None = None
     conda_env: str | None = None
@@ -67,6 +68,7 @@ def load_config(path: str | Path) -> LauncherConfig:
             name=str(item.get("name", module_id)),
             domain_id=item.get("domain_id"),
             workdir=Path(item["workdir"]).expanduser(),
+            env={str(k): str(v) for k, v in (item.get("env") or {}).items()},
             setup=item.get("setup"),
             conda_env=item.get("conda_env"),
             conda_sh=item.get("conda_sh"),

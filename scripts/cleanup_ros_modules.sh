@@ -21,6 +21,8 @@ patterns=(
   "ros2 launch orbbec_camera gemini_330_series.launch.py"
   "ros2 run domain_bridge_cpp domain_bridge_event_bundle"
   "domain_bridge_event_bundle"
+  "导航-all2-单侧点云"
+  "yolo_radar_cam_roi_icp"
   "ros2 launch vehicle_simulator system_real_robot.launch"
   "ros2 launch waypoint_example waypoint_example_garage.launch"
   "waypoint_example/waypointExample"

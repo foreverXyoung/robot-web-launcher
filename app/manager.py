@@ -96,8 +96,8 @@ class ProcessManager:
                     await self._broadcast(module_id, "error", f"autostart failed: {exc}")
 
     async def start_many(self, module_ids: list[str]) -> None:
-        ordered = self._expand_dependencies(module_ids)
-        for module_id in ordered:
+        for module_id in module_ids:
+            self._require_module(module_id)
             try:
                 await self.start(module_id)
             except Exception as exc:
@@ -329,23 +329,6 @@ class ProcessManager:
         source_lines.append('exec "$@"')
         script = "\n".join(source_lines)
         return ["bash", "-lc", script, "bash", *module.cmd]
-
-    def _expand_dependencies(self, module_ids: list[str]) -> list[str]:
-        result: list[str] = []
-        seen: set[str] = set()
-
-        def visit(module_id: str) -> None:
-            self._require_module(module_id)
-            if module_id in seen:
-                return
-            for dep in self.config.modules[module_id].depends_on:
-                visit(dep)
-            seen.add(module_id)
-            result.append(module_id)
-
-        for item in module_ids:
-            visit(item)
-        return result
 
     def _require_module(self, module_id: str) -> None:
         if module_id not in self.config.modules:

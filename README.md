@@ -123,3 +123,4 @@ conda_sh: /home/nvidia/anaconda3/etc/profile.d/conda.sh
 4. 串口设备建议用 udev 固定名称，不要长期依赖 `/dev/ttyUSB0`。
 5. `system_real_robot.launch` 建议改名为 `system_real_robot.launch.py`，配置里已经按 `.launch.py` 写了。
 6. 频率监测需要后端 Python 能导入 `rclpy`。本项目的开发脚本和 systemd 模板会 source `/opt/ros/humble/setup.bash`；如果你的 ROS 安装路径不同，需要同步修改脚本。
+7. `depends_on` 只用于页面提示和启动前 warning，不会自动启动依赖模块；底盘控制等安全敏感模块应保持 `autostart: false`，由现场人员确认后手动启动。

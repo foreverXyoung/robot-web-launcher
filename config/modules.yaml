@@ -66,7 +66,7 @@ modules:
     workdir: /data/sinuo_project/robot_contor_ws
     setup: install/setup.bash
     cmd: ["ros2", "run", "keya_robot_controller", "robot_controller_node"]
-    autostart: true
+    autostart: false
     restart_on_crash: true
     startup_delay: 1
     health_nodes: ["/robot_controller"]

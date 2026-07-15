@@ -53,24 +53,28 @@ class RosTopicMonitor:
             self.error = f"{type(exc).__name__}: {exc}"
             return
 
-        grouped: dict[int, list[TopicSpec]] = defaultdict(list)
         for module_id, module in self.config.modules.items():
             if not module.monitor_topics or module.domain_id is None:
                 continue
             for topic in module.monitor_topics:
-                grouped[int(module.domain_id)].append(
-                    TopicSpec(module_id=module_id, topic=topic, domain_id=int(module.domain_id), module=module)
+                spec = TopicSpec(
+                    module_id=module_id,
+                    topic=topic,
+                    domain_id=int(module.domain_id),
+                    module=module,
                 )
+                thread = threading.Thread(
+                    target=self._spin_topic,
+                    args=(spec,),
+                    name=f"ros-topic-monitor-{module_id}-{self._safe_name(topic)}",
+                    daemon=True,
+                )
+                self._threads.append(thread)
+                thread.start()
 
-        for domain_id, specs in grouped.items():
-            thread = threading.Thread(
-                target=self._spin_domain,
-                args=(domain_id, specs),
-                name=f"ros-topic-monitor-{domain_id}",
-                daemon=True,
-            )
-            self._threads.append(thread)
-            thread.start()
+    @staticmethod
+    def _safe_name(value: str) -> str:
+        return "".join(ch if ch.isalnum() else "_" for ch in value).strip("_") or "topic"
 
     def stop(self) -> None:
         self.enabled = False
@@ -138,7 +142,7 @@ class RosTopicMonitor:
                     results.append(self._rate_payload(spec, hz, "ok", "ok"))
         return results
 
-    def _spin_domain(self, domain_id: int, specs: list[TopicSpec]) -> None:
+    def _spin_topic(self, spec: TopicSpec) -> None:
         import rclpy
         from rclpy.executors import SingleThreadedExecutor
         from rclpy.qos import qos_profile_sensor_data
@@ -152,20 +156,21 @@ class RosTopicMonitor:
         try:
             rclpy.init(
                 context=context,
-                domain_id=domain_id,
+                domain_id=spec.domain_id,
                 signal_handler_options=SignalHandlerOptions.NO,
             )
-            node = rclpy.create_node(f"robot_web_launcher_monitor_{domain_id}", context=context)
+            node = rclpy.create_node(
+                f"robot_web_launcher_monitor_{spec.module_id}_{self._safe_name(spec.topic)}",
+                context=context,
+            )
             executor = SingleThreadedExecutor(context=context)
             executor.add_node(node)
-            subscriptions: set[str] = set()
+            subscribed = False
+            key = (spec.module_id, spec.topic)
 
             while not self._stop_event.is_set() and context.ok():
-                topic_types = {name: types for name, types in node.get_topic_names_and_types()}
-                for spec in specs:
-                    key = (spec.module_id, spec.topic)
-                    if spec.topic in subscriptions:
-                        continue
+                if not subscribed:
+                    topic_types = {name: types for name, types in node.get_topic_names_and_types()}
                     types = topic_types.get(spec.topic)
                     if not types:
                         with self._lock:
@@ -179,7 +184,7 @@ class RosTopicMonitor:
                             self._make_callback(spec.module_id, spec.topic),
                             qos_profile_sensor_data,
                         )
-                        subscriptions.add(spec.topic)
+                        subscribed = True
                         with self._lock:
                             self._topic_status[key] = {"status": "waiting", "message": f"subscribed {types[0]}"}
                     except Exception as exc:
@@ -187,9 +192,9 @@ class RosTopicMonitor:
                             self._topic_status[key] = {"status": "error", "message": f"{type(exc).__name__}: {exc}"}
 
                 executor.spin_once(timeout_sec=0.2)
-                self._mark_stale_samples()
+                self._mark_stale_sample(key)
         except Exception as exc:
-            self.error = f"domain {domain_id}: {type(exc).__name__}: {exc}"
+            self.error = f"{spec.topic}: {type(exc).__name__}: {exc}"
         finally:
             if executor is not None and node is not None:
                 try:
@@ -224,13 +229,13 @@ class RosTopicMonitor:
 
         return callback
 
-    def _mark_stale_samples(self) -> None:
+    def _mark_stale_sample(self, key: tuple[str, str]) -> None:
         now = time.monotonic()
         with self._lock:
-            for key, samples in self._samples.items():
-                self._trim_samples(samples, now)
-                if not samples:
-                    self._topic_status[key] = {"status": "timeout", "message": "no recent data"}
+            samples = self._samples[key]
+            self._trim_samples(samples, now)
+            if not samples:
+                self._topic_status[key] = {"status": "timeout", "message": "no recent data"}
 
     def _trim_samples(self, samples: deque[float], now: float) -> None:
         while samples and now - samples[0] > self.window_sec:

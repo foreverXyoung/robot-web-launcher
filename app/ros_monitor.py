@@ -140,12 +140,15 @@ class RosTopicMonitor:
 
     def _spin_domain(self, domain_id: int, specs: list[TopicSpec]) -> None:
         import rclpy
+        from rclpy.executors import SingleThreadedExecutor
         from rclpy.qos import qos_profile_sensor_data
         from rclpy.signals import SignalHandlerOptions
         from rosidl_runtime_py.utilities import get_message
 
         context = rclpy.context.Context()
         self._contexts.append(context)
+        executor = None
+        node = None
         try:
             rclpy.init(
                 context=context,
@@ -153,6 +156,8 @@ class RosTopicMonitor:
                 signal_handler_options=SignalHandlerOptions.NO,
             )
             node = rclpy.create_node(f"robot_web_launcher_monitor_{domain_id}", context=context)
+            executor = SingleThreadedExecutor(context=context)
+            executor.add_node(node)
             subscriptions: set[str] = set()
 
             while not self._stop_event.is_set() and context.ok():
@@ -181,13 +186,24 @@ class RosTopicMonitor:
                         with self._lock:
                             self._topic_status[key] = {"status": "error", "message": f"{type(exc).__name__}: {exc}"}
 
-                rclpy.spin_once(node, timeout_sec=0.2)
+                executor.spin_once(timeout_sec=0.2)
                 self._mark_stale_samples()
         except Exception as exc:
             self.error = f"domain {domain_id}: {type(exc).__name__}: {exc}"
         finally:
+            if executor is not None and node is not None:
+                try:
+                    executor.remove_node(node)
+                except Exception:
+                    pass
+            if executor is not None:
+                try:
+                    executor.shutdown()
+                except Exception:
+                    pass
             try:
-                node.destroy_node()  # type: ignore[name-defined]
+                if node is not None:
+                    node.destroy_node()
             except Exception:
                 pass
             try:

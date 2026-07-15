@@ -36,11 +36,17 @@ python3 -m pip install -r requirements.txt
 ./scripts/run_dev.sh
 ```
 
-`run_dev.sh` 会自动尝试 source `/opt/ros/humble/setup.bash`，这样后端的常驻 rclpy 监测器可以导入 ROS 2 Python 包。
+`run_dev.sh` 会自动尝试 source `/opt/ros/humble/setup.bash` 和 `/data/sinuo_project/mid_ws/install/setup.bash`，这样后端的常驻 rclpy 监测器可以导入 ROS 2 Python 包以及 Livox 自定义消息。
 默认是单进程模式并关闭 access log，适合现场调试。若确实需要热重载：
 
 ```bash
 ROBOT_LAUNCHER_RELOAD=1 ./scripts/run_dev.sh
+```
+
+如果还有其它频率监测话题使用自定义消息类型，可以额外指定 workspace setup：
+
+```bash
+ROBOT_LAUNCHER_EXTRA_SETUPS=/data/xxx_ws/install/setup.bash ./scripts/run_dev.sh
 ```
 
 停止开发服务：
@@ -122,5 +128,5 @@ conda_sh: /home/nvidia/anaconda3/etc/profile.d/conda.sh
 3. 自动启动时建议关闭 RViz，比如 `rviz:=false`。
 4. 串口设备建议用 udev 固定名称，不要长期依赖 `/dev/ttyUSB0`。
 5. `system_real_robot.launch` 建议改名为 `system_real_robot.launch.py`，配置里已经按 `.launch.py` 写了。
-6. 频率监测需要后端 Python 能导入 `rclpy`。本项目的开发脚本和 systemd 模板会 source `/opt/ros/humble/setup.bash`；如果你的 ROS 安装路径不同，需要同步修改脚本。
+6. 频率监测需要后端 Python 能导入 `rclpy` 和被监测话题的消息类型。开发脚本和 systemd 模板会 source `/opt/ros/humble/setup.bash` 以及 MID360 的 `mid_ws`；如果你的 ROS 安装路径或工作空间路径不同，需要同步修改脚本。
 7. `depends_on` 只用于页面提示和启动前 warning，不会自动启动依赖模块；底盘控制等安全敏感模块应保持 `autostart: false`，由现场人员确认后手动启动。

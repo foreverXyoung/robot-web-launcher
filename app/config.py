@@ -19,6 +19,7 @@ class ModuleConfig:
     setup: str | None = None
     conda_env: str | None = None
     conda_sh: str | None = None
+    python_script: str | None = None
     autostart: bool = False
     restart_on_crash: bool = False
     depends_on: list[str] = field(default_factory=list)
@@ -65,6 +66,13 @@ def load_config(path: str | Path) -> LauncherConfig:
         cmd = item.get("cmd")
         if not isinstance(cmd, list) or not all(isinstance(x, str) for x in cmd):
             raise ValueError(f"module {module_id}.cmd must be a list of strings")
+        python_script = item.get("python_script")
+        if python_script is not None and not isinstance(python_script, str):
+            raise ValueError(f"module {module_id}.python_script must be a string")
+        effective_cmd = [*cmd]
+        if python_script:
+            effective_cmd.append(python_script)
+
         modules[module_id] = ModuleConfig(
             id=module_id,
             name=str(item.get("name", module_id)),
@@ -75,7 +83,8 @@ def load_config(path: str | Path) -> LauncherConfig:
             setup=item.get("setup"),
             conda_env=item.get("conda_env"),
             conda_sh=item.get("conda_sh"),
-            cmd=cmd,
+            python_script=python_script,
+            cmd=effective_cmd,
             autostart=bool(item.get("autostart", False)),
             restart_on_crash=bool(item.get("restart_on_crash", False)),
             depends_on=_as_str_list(item.get("depends_on"), f"{module_id}.depends_on"),

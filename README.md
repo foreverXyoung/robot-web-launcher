@@ -97,20 +97,21 @@ module_id:
   cmd: ["ros2", "launch", "pkg", "xxx.launch.py"]
 ```
 
-Conda 模块示例：
+目标检测这类 Python 模块建议直接指定环境里的 Python，避免 `conda activate` 依赖 shell 初始化脚本：
 
 ```yaml
 object_detection:
-  name: Object Detection
+  name: 目标检测
   domain_id: 20
   workdir: /data/sinuo_project/object_detection/26_4_9
-  conda_env: zhaigou
-  cmd: ["python", "导航-all2-单侧点云-先验更远-目标范围-先验选点优化-读取内参-先验姿态优化.py"]
+  cmd: ["/home/nvidia1/miniforge3/envs/zhaigou/bin/python"]
+  python_script: "导航-all2-单侧点云-先验更远-目标范围-先验选点优化-读取内参-先验姿态优化.py"
 ```
 
-如果你的 Conda 不在 `~/miniconda3`，需要加：
+如果仍希望使用 `conda activate`，可以配置：
 
 ```yaml
+conda_env: zhaigou
 conda_sh: /home/nvidia/anaconda3/etc/profile.d/conda.sh
 ```
 

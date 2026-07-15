@@ -58,6 +58,7 @@ modules:
     startup_delay: 3
     health_nodes: ["/laserMapping"]
     health_topics: ["/Odometry", "/cloud_registered"]
+    monitor_topics: ["/Odometry"]
 
   robot_controller:
     name: 底盘控制
@@ -123,7 +124,7 @@ modules:
     startup_delay: 2
 
   auto_explore:
-    name: Auto Explore
+    name: 导航模块
     domain_id: 10
     workdir: /data/sinuo_project/Auto_Explor_ws
     setup: install/setup.bash
@@ -132,6 +133,7 @@ modules:
     restart_on_crash: false
     depends_on: ["fast_lio", "robot_controller", "g90_rtk"]
     startup_delay: 3
+    monitor_topics: ["/cmd_vel"]
 
   waypoint:
     name: Waypoint

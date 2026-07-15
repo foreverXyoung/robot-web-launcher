@@ -55,7 +55,7 @@ class RosTopicMonitor:
 
         grouped: dict[int, list[TopicSpec]] = defaultdict(list)
         for module_id, module in self.config.modules.items():
-            if module.category != "sensor" or module.domain_id is None:
+            if not module.monitor_topics or module.domain_id is None:
                 continue
             for topic in module.monitor_topics:
                 grouped[int(module.domain_id)].append(
@@ -107,7 +107,7 @@ class RosTopicMonitor:
         specs = [
             TopicSpec(module_id=module_id, topic=topic, domain_id=int(module.domain_id), module=module)
             for module_id, module in self.config.modules.items()
-            if module.category == "sensor" and module.domain_id is not None
+            if module.monitor_topics and module.domain_id is not None
             for topic in module.monitor_topics
         ]
 

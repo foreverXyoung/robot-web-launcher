@@ -128,7 +128,7 @@ modules:
     domain_id: 10
     workdir: /data/sinuo_project/Auto_Explor_ws
     setup: install/setup.bash
-    cmd: ["ros2", "launch", "vehicle_simulator", "system_real_robot.launch.py"]
+    cmd: ["ros2", "launch", "vehicle_simulator", "system_real_robot.launch"]
     autostart: false
     restart_on_crash: false
     depends_on: ["fast_lio", "robot_controller", "g90_rtk"]

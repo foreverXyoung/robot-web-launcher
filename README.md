@@ -127,6 +127,5 @@ conda_sh: /home/nvidia/anaconda3/etc/profile.d/conda.sh
 2. 不要把这个 Web 页面暴露到公网。现场局域网使用即可。
 3. 自动启动时建议关闭 RViz，比如 `rviz:=false`。
 4. 串口设备建议用 udev 固定名称，不要长期依赖 `/dev/ttyUSB0`。
-5. `system_real_robot.launch` 建议改名为 `system_real_robot.launch.py`，配置里已经按 `.launch.py` 写了。
-6. 频率监测需要后端 Python 能导入 `rclpy` 和被监测话题的消息类型。开发脚本和 systemd 模板会 source `/opt/ros/humble/setup.bash` 以及 MID360 的 `mid_ws`；如果你的 ROS 安装路径或工作空间路径不同，需要同步修改脚本。
-7. `depends_on` 只用于页面提示和启动前 warning，不会自动启动依赖模块；底盘控制等安全敏感模块应保持 `autostart: false`，由现场人员确认后手动启动。
+5. 频率监测需要后端 Python 能导入 `rclpy` 和被监测话题的消息类型。开发脚本和 systemd 模板会 source `/opt/ros/humble/setup.bash` 以及 MID360 的 `mid_ws`；如果你的 ROS 安装路径或工作空间路径不同，需要同步修改脚本。
+6. `depends_on` 只用于页面提示和启动前 warning，不会自动启动依赖模块；底盘控制等安全敏感模块应保持 `autostart: false`，由现场人员确认后手动启动。

@@ -184,15 +184,32 @@ class RosTopicMonitor:
                         continue
                     try:
                         msg_type = get_message(types[0])
-                        node.create_subscription(
-                            msg_type,
-                            spec.topic,
-                            self._make_callback(spec.module_id, spec.topic),
-                            qos,
-                        )
+                        subscription_mode = "raw"
+                        try:
+                            node.create_subscription(
+                                msg_type,
+                                spec.topic,
+                                self._make_callback(spec.module_id, spec.topic),
+                                qos,
+                                raw=True,
+                            )
+                        except TypeError:
+                            # Older rclpy builds may not expose the raw argument.
+                            # Fall back to a normal subscription so monitoring
+                            # still works, but report the mode for diagnostics.
+                            subscription_mode = "normal"
+                            node.create_subscription(
+                                msg_type,
+                                spec.topic,
+                                self._make_callback(spec.module_id, spec.topic),
+                                qos,
+                            )
                         subscribed = True
                         with self._lock:
-                            self._topic_status[key] = {"status": "waiting", "message": f"subscribed {types[0]}"}
+                            self._topic_status[key] = {
+                                "status": "waiting",
+                                "message": f"subscribed {types[0]} ({subscription_mode})",
+                            }
                     except Exception as exc:
                         with self._lock:
                             self._topic_status[key] = {"status": "error", "message": f"{type(exc).__name__}: {exc}"}

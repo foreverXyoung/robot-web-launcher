@@ -38,7 +38,7 @@ async def on_startup() -> None:
 
 @app.on_event("shutdown")
 async def on_shutdown() -> None:
-    manager.set_monitor_enabled(False)
+    await manager.shutdown()
 
 
 @app.get("/")

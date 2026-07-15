@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import re
 import signal
@@ -41,6 +42,7 @@ class ProcessManager:
         self.monitor = RosTopicMonitor(config)
         self.config.log_dir.mkdir(parents=True, exist_ok=True)
         self.config.state_dir.mkdir(parents=True, exist_ok=True)
+        self._restore_process_states()
 
     def list_modules(self) -> list[dict]:
         result = []
@@ -114,6 +116,10 @@ class ProcessManager:
         for module_id in reversed(module_ids):
             await self.stop(module_id)
 
+    async def shutdown(self) -> None:
+        await self.stop_many(list(self.config.modules.keys()))
+        self.monitor.set_enabled(False)
+
     async def start(self, module_id: str) -> dict:
         self._require_module(module_id)
         async with self.lock:
@@ -167,6 +173,7 @@ class ProcessManager:
             state.pid = process.pid
             state.status = "running"
             state.message = "running"
+            self._save_process_state(module_id, process.pid)
             await self._broadcast(module_id, "status", f"running pid={process.pid}")
             asyncio.create_task(self._pipe_output(module_id, process, log_path))
             asyncio.create_task(self._watch_process(module_id, process))
@@ -178,10 +185,23 @@ class ProcessManager:
         state = self.states[module_id]
         if not process or process.returncode is not None:
             self.processes.pop(module_id, None)
+            if state.pid and self._pid_alive(state.pid):
+                state.status = "stopping"
+                state.message = "stopping recovered process"
+                await self._broadcast(module_id, "status", f"stopping recovered pid={state.pid}")
+                try:
+                    await self._terminate_pid_group(module_id, state.pid)
+                except Exception as exc:
+                    state.status = "crashed"
+                    state.message = f"stop failed: {type(exc).__name__}: {exc}"
+                    await self._broadcast(module_id, "error", state.message)
+                    return asdict(state)
+                return await self._mark_stopped_pid(module_id)
             state.status = "stopped"
             state.pid = None
             state.message = "stopped"
             state.stopped_at = datetime.now().isoformat(timespec="seconds")
+            self._remove_process_state(module_id)
             return asdict(state)
 
         state.status = "stopping"
@@ -221,12 +241,19 @@ class ProcessManager:
         for item in self.monitor.rates():
             state = self.states.get(item["module"])
             if state is not None and state.status not in RUNNING_STATES:
-                item = {
-                    **item,
-                    "hz": None,
-                    "status": "inactive",
-                    "message": f"module {state.status}",
-                }
+                if item.get("hz") is None or item.get("hz") == 0:
+                    item = {
+                        **item,
+                        "hz": None,
+                        "status": "inactive",
+                        "message": f"module {state.status}",
+                    }
+                else:
+                    item = {
+                        **item,
+                        "status": "unexpected_publisher",
+                        "message": f"module {state.status}, but topic is still receiving data",
+                    }
             results.append(item)
         return results
 
@@ -268,6 +295,7 @@ class ProcessManager:
         state.pid = None
         state.stopped_at = datetime.now().isoformat(timespec="seconds")
         state.message = f"process exited rc={returncode}"
+        self._remove_process_state(module_id)
         await self._broadcast(module_id, "status", state.message)
         module = self.config.modules[module_id]
         if module.restart_on_crash and returncode != 0:
@@ -313,6 +341,19 @@ class ProcessManager:
         state.returncode = process.returncode
         state.stopped_at = datetime.now().isoformat(timespec="seconds")
         state.message = f"stopped rc={process.returncode}"
+        self._remove_process_state(module_id)
+        await self._broadcast(module_id, "status", state.message)
+        return asdict(state)
+
+    async def _mark_stopped_pid(self, module_id: str) -> dict:
+        state = self.states[module_id]
+        self.processes.pop(module_id, None)
+        state.status = "stopped"
+        state.pid = None
+        state.returncode = None
+        state.stopped_at = datetime.now().isoformat(timespec="seconds")
+        state.message = "stopped recovered process"
+        self._remove_process_state(module_id)
         await self._broadcast(module_id, "status", state.message)
         return asdict(state)
 
@@ -328,6 +369,103 @@ class ProcessManager:
                 process.send_signal(sig)
             except ProcessLookupError:
                 return
+
+    async def _terminate_pid_group(self, module_id: str, pid: int) -> None:
+        await self._broadcast(module_id, "status", "sending SIGINT")
+        self._send_signal_to_pid(pid, signal.SIGINT)
+        if await self._wait_pid_exit(pid, self.config.stop_timeout_sec):
+            return
+
+        await self._broadcast(module_id, "status", "SIGINT timeout, sending SIGTERM")
+        self._send_signal_to_pid(pid, signal.SIGTERM)
+        if await self._wait_pid_exit(pid, 3.0):
+            return
+
+        await self._broadcast(module_id, "status", "SIGTERM timeout, sending SIGKILL")
+        self._send_signal_to_pid(pid, signal.SIGKILL)
+        if await self._wait_pid_exit(pid, 2.0):
+            return
+
+        await self._broadcast(module_id, "error", "SIGKILL wait timeout; marking stopped")
+
+    def _send_signal_to_pid(self, pid: int, sig: signal.Signals) -> None:
+        try:
+            os.killpg(os.getpgid(pid), sig)
+        except ProcessLookupError:
+            return
+        except Exception:
+            try:
+                os.kill(pid, sig)
+            except ProcessLookupError:
+                return
+
+    async def _wait_pid_exit(self, pid: int, timeout: float) -> bool:
+        deadline = asyncio.get_running_loop().time() + timeout
+        while asyncio.get_running_loop().time() < deadline:
+            if not self._pid_alive(pid):
+                return True
+            await asyncio.sleep(0.1)
+        return not self._pid_alive(pid)
+
+    def _restore_process_states(self) -> None:
+        for module_id in self.config.modules:
+            data = self._load_process_state(module_id)
+            pid = data.get("pid") if data else None
+            if not isinstance(pid, int) or not self._pid_alive(pid):
+                self._remove_process_state(module_id)
+                continue
+            state = self.states[module_id]
+            state.status = "running"
+            state.pid = pid
+            state.returncode = None
+            state.started_at = data.get("started_at")
+            state.stopped_at = None
+            state.log_path = data.get("log_path")
+            state.message = f"recovered running pid={pid}"
+
+    def _save_process_state(self, module_id: str, pid: int) -> None:
+        state = self.states[module_id]
+        payload = {
+            "module_id": module_id,
+            "pid": pid,
+            "started_at": state.started_at,
+            "log_path": state.log_path,
+            "saved_at": datetime.now().isoformat(timespec="seconds"),
+        }
+        path = self._process_state_path(module_id)
+        tmp_path = path.with_suffix(".tmp")
+        tmp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp_path.replace(path)
+
+    def _load_process_state(self, module_id: str) -> dict:
+        path = self._process_state_path(module_id)
+        if not path.exists():
+            return {}
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+
+    def _remove_process_state(self, module_id: str) -> None:
+        try:
+            self._process_state_path(module_id).unlink()
+        except FileNotFoundError:
+            pass
+
+    def _process_state_path(self, module_id: str) -> Path:
+        return self.config.state_dir / f"{module_id}.json"
+
+    @staticmethod
+    def _pid_alive(pid: int) -> bool:
+        if pid <= 0:
+            return False
+        try:
+            os.kill(pid, 0)
+            return True
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
 
     def _build_argv(self, module: ModuleConfig) -> list[str]:
         source_lines = ["set -e", f"cd {self._sh_quote(str(module.workdir))}"]

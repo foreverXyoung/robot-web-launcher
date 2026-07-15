@@ -221,6 +221,9 @@
         if (r.status === "inactive") {
           return `<div class="muted" title="${escapeHtml(r.message || '')}">${topic}: 未运行</div>`;
         }
+        if (r.status === "unexpected_publisher") {
+          return `<div class="rate-bad" title="${escapeHtml(r.message || '')}">${topic}: 异常发布 ${Number(r.hz).toFixed(2)} Hz</div>`;
+        }
         if (r.hz === null || r.hz === undefined) {
           return `<div class="rate-bad" title="${escapeHtml(r.message || '')}">${topic}: -- Hz</div>`;
         }

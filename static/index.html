@@ -218,6 +218,9 @@
       if (items.length === 0) return '<span class="muted">-</span>';
       return items.map(r => {
         const topic = escapeHtml(r.topic);
+        if (r.status === "inactive") {
+          return `<div class="muted" title="${escapeHtml(r.message || '')}">${topic}: 未运行</div>`;
+        }
         if (r.hz === null || r.hz === undefined) {
           return `<div class="rate-bad" title="${escapeHtml(r.message || '')}">${topic}: -- Hz</div>`;
         }

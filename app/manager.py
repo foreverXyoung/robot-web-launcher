@@ -217,7 +217,18 @@ class ProcessManager:
         await self.stop_many(module_ids)
 
     async def measure_sensor_rates(self) -> list[dict]:
-        return self.monitor.rates()
+        results = []
+        for item in self.monitor.rates():
+            state = self.states.get(item["module"])
+            if state is not None and state.status not in RUNNING_STATES:
+                item = {
+                    **item,
+                    "hz": None,
+                    "status": "inactive",
+                    "message": f"module {state.status}",
+                }
+            results.append(item)
+        return results
 
     def monitor_status(self) -> dict:
         return self.monitor.status()

@@ -37,6 +37,17 @@ python3 -m pip install -r requirements.txt
 ```
 
 `run_dev.sh` 会自动尝试 source `/opt/ros/humble/setup.bash`，这样后端的常驻 rclpy 监测器可以导入 ROS 2 Python 包。
+默认是单进程模式并关闭 access log，适合现场调试。若确实需要热重载：
+
+```bash
+ROBOT_LAUNCHER_RELOAD=1 ./scripts/run_dev.sh
+```
+
+停止开发服务：
+
+```bash
+./scripts/stop_dev.sh
+```
 
 浏览器访问：
 

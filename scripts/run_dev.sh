@@ -8,4 +8,13 @@ if [[ -f /opt/ros/humble/setup.bash ]]; then
   set -u
 fi
 export ROBOT_LAUNCHER_CONFIG="${ROBOT_LAUNCHER_CONFIG:-$(pwd)/config/modules.yaml}"
-exec python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
+HOST="${ROBOT_LAUNCHER_HOST:-0.0.0.0}"
+PORT="${ROBOT_LAUNCHER_PORT:-8080}"
+RELOAD="${ROBOT_LAUNCHER_RELOAD:-0}"
+
+args=(app.main:app --host "${HOST}" --port "${PORT}" --no-access-log)
+if [[ "${RELOAD}" == "1" ]]; then
+  args+=(--reload)
+fi
+
+exec python3 -m uvicorn "${args[@]}"

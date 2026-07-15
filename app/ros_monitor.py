@@ -145,7 +145,7 @@ class RosTopicMonitor:
     def _spin_topic(self, spec: TopicSpec) -> None:
         import rclpy
         from rclpy.executors import SingleThreadedExecutor
-        from rclpy.qos import qos_profile_sensor_data
+        from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy
         from rclpy.signals import SignalHandlerOptions
         from rosidl_runtime_py.utilities import get_message
 
@@ -167,6 +167,11 @@ class RosTopicMonitor:
             executor.add_node(node)
             subscribed = False
             key = (spec.module_id, spec.topic)
+            qos = QoSProfile(
+                history=HistoryPolicy.KEEP_LAST,
+                depth=100,
+                reliability=ReliabilityPolicy.BEST_EFFORT,
+            )
 
             while not self._stop_event.is_set() and context.ok():
                 if not subscribed:
@@ -175,6 +180,7 @@ class RosTopicMonitor:
                     if not types:
                         with self._lock:
                             self._topic_status[key] = {"status": "no_topic", "message": "topic not found"}
+                        time.sleep(0.2)
                         continue
                     try:
                         msg_type = get_message(types[0])
@@ -182,7 +188,7 @@ class RosTopicMonitor:
                             msg_type,
                             spec.topic,
                             self._make_callback(spec.module_id, spec.topic),
-                            qos_profile_sensor_data,
+                            qos,
                         )
                         subscribed = True
                         with self._lock:
@@ -190,8 +196,15 @@ class RosTopicMonitor:
                     except Exception as exc:
                         with self._lock:
                             self._topic_status[key] = {"status": "error", "message": f"{type(exc).__name__}: {exc}"}
+                        time.sleep(0.2)
+                        continue
 
-                executor.spin_once(timeout_sec=0.2)
+                # spin_once handles at most a small amount of ready work per call.
+                # A 0.2s timeout makes high-rate topics look artificially slow
+                # (e.g. 500 Hz IMU can be reported as only tens of Hz). Keep this
+                # short so the monitor drains callbacks close to the real publish
+                # rate without blocking other housekeeping.
+                executor.spin_once(timeout_sec=0.001)
                 self._mark_stale_sample(key)
         except Exception as exc:
             self.error = f"{spec.topic}: {type(exc).__name__}: {exc}"

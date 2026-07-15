@@ -176,25 +176,14 @@ class ProcessManager:
         state.status = "stopping"
         state.message = "stopping"
         await self._broadcast(module_id, "status", "stopping")
-        await self._send_signal(process, signal.SIGINT)
         try:
-            await asyncio.wait_for(process.wait(), timeout=self.config.stop_timeout_sec)
-        except TimeoutError:
-            await self._send_signal(process, signal.SIGTERM)
-            try:
-                await asyncio.wait_for(process.wait(), timeout=3)
-            except TimeoutError:
-                await self._send_signal(process, signal.SIGKILL)
-                await process.wait()
-
-        self.processes.pop(module_id, None)
-        state.status = "stopped"
-        state.pid = None
-        state.returncode = process.returncode
-        state.stopped_at = datetime.now().isoformat(timespec="seconds")
-        state.message = f"stopped rc={process.returncode}"
-        await self._broadcast(module_id, "status", state.message)
-        return asdict(state)
+            await self._terminate_process_group(module_id, process)
+        except Exception as exc:
+            state.status = "crashed"
+            state.message = f"stop failed: {type(exc).__name__}: {exc}"
+            await self._broadcast(module_id, "error", state.message)
+            return asdict(state)
+        return await self._mark_stopped(module_id, process)
 
     async def restart(self, module_id: str) -> dict:
         await self.stop(module_id)
@@ -248,17 +237,62 @@ class ProcessManager:
         state = self.states[module_id]
         if self.processes.get(module_id) is process:
             self.processes.pop(module_id, None)
-        if state.status != "stopping":
-            state.status = "exited" if returncode == 0 else "crashed"
-            state.returncode = returncode
-            state.pid = None
-            state.stopped_at = datetime.now().isoformat(timespec="seconds")
-            state.message = f"process exited rc={returncode}"
-            await self._broadcast(module_id, "status", state.message)
-            module = self.config.modules[module_id]
-            if module.restart_on_crash and returncode != 0:
-                await asyncio.sleep(2)
-                await self.start(module_id)
+        if state.status == "stopping":
+            await self._mark_stopped(module_id, process)
+            return
+
+        state.status = "exited" if returncode == 0 else "crashed"
+        state.returncode = returncode
+        state.pid = None
+        state.stopped_at = datetime.now().isoformat(timespec="seconds")
+        state.message = f"process exited rc={returncode}"
+        await self._broadcast(module_id, "status", state.message)
+        module = self.config.modules[module_id]
+        if module.restart_on_crash and returncode != 0:
+            await asyncio.sleep(2)
+            await self.start(module_id)
+
+    async def _terminate_process_group(self, module_id: str, process: asyncio.subprocess.Process) -> None:
+        await self._broadcast(module_id, "status", "sending SIGINT")
+        await self._send_signal(process, signal.SIGINT)
+        if await self._wait_process(process, self.config.stop_timeout_sec):
+            return
+
+        await self._broadcast(module_id, "status", "SIGINT timeout, sending SIGTERM")
+        await self._send_signal(process, signal.SIGTERM)
+        if await self._wait_process(process, 3.0):
+            return
+
+        await self._broadcast(module_id, "status", "SIGTERM timeout, sending SIGKILL")
+        await self._send_signal(process, signal.SIGKILL)
+        if await self._wait_process(process, 2.0):
+            return
+
+        # Last resort: avoid leaving the UI in stopping forever. If process.wait()
+        # does not complete after SIGKILL, it is usually a stale process handle or
+        # a child/pipe cleanup edge case; the OS has already been asked to kill it.
+        await self._broadcast(module_id, "error", "SIGKILL wait timeout; marking stopped")
+
+    @staticmethod
+    async def _wait_process(process: asyncio.subprocess.Process, timeout: float) -> bool:
+        if process.returncode is not None:
+            return True
+        try:
+            await asyncio.wait_for(process.wait(), timeout=timeout)
+            return True
+        except TimeoutError:
+            return False
+
+    async def _mark_stopped(self, module_id: str, process: asyncio.subprocess.Process) -> dict:
+        state = self.states[module_id]
+        self.processes.pop(module_id, None)
+        state.status = "stopped"
+        state.pid = None
+        state.returncode = process.returncode
+        state.stopped_at = datetime.now().isoformat(timespec="seconds")
+        state.message = f"stopped rc={process.returncode}"
+        await self._broadcast(module_id, "status", state.message)
+        return asdict(state)
 
     async def _send_signal(self, process: asyncio.subprocess.Process, sig: signal.Signals) -> None:
         if process.returncode is not None:

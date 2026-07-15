@@ -18,7 +18,10 @@ modules:
     restart_on_crash: true
     startup_delay: 3
     health_nodes: ["/livox_lidar_publisher"]
-    monitor_topics: ["/livox/lidar"]
+    # /livox/lidar is a high-bandwidth CustomMsg topic. Keeping a Python
+    # monitor subscribed to it can disturb other sensor rates on AGX Orin.
+    # Use the lightweight Livox IMU stream as the MID360 online heartbeat.
+    monitor_topics: ["/livox/imu"]
 
   imu:
     name: N300pro IMU

@@ -98,7 +98,14 @@ class ProcessManager:
     async def start_many(self, module_ids: list[str]) -> None:
         ordered = self._expand_dependencies(module_ids)
         for module_id in ordered:
-            await self.start(module_id)
+            try:
+                await self.start(module_id)
+            except Exception as exc:
+                await self._broadcast(
+                    module_id,
+                    "warning",
+                    f"start failed but sequence continues: {type(exc).__name__}: {exc}",
+                )
             delay = self.config.modules[module_id].startup_delay
             if delay > 0:
                 await asyncio.sleep(delay)
@@ -120,7 +127,11 @@ class ProcessManager:
                 if self.states[dep].status not in {"starting", "running"}
             ]
             if missing_deps:
-                raise RuntimeError(f"{module_id} missing dependencies: {', '.join(missing_deps)}")
+                await self._broadcast(
+                    module_id,
+                    "warning",
+                    f"starting with inactive dependencies: {', '.join(missing_deps)}",
+                )
 
             log_path = self.config.log_dir / f"{module_id}.log"
             argv = self._build_argv(module)

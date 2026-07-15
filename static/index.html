@@ -169,7 +169,7 @@
       } else if (monitorStatus.error) {
         state.textContent = `频率监测异常：${monitorStatus.error}`;
       } else {
-        state.textContent = `频率监测器已开启，统计窗口 ${monitorStatus.window_sec}s`;
+        state.textContent = `频率监测器已开启，统计窗口 ${monitorStatus.window_sec}s，采样 ${monitorStatus.sample_sec}s / 休息 ${monitorStatus.idle_sec}s`;
       }
     }
 

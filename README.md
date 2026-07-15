@@ -141,5 +141,5 @@ conda_sh: /home/nvidia/anaconda3/etc/profile.d/conda.sh
 4. 串口设备建议用 udev 固定名称，不要长期依赖 `/dev/ttyUSB0`。
 5. 频率监测需要后端 Python 能导入 `rclpy` 和被监测话题的消息类型。开发脚本和 systemd 模板会 source `/opt/ros/humble/setup.bash` 以及 MID360 的 `mid_ws`；如果你的 ROS 安装路径或工作空间路径不同，需要同步修改脚本。
 6. 后端退出时会尝试停止所有由它管理的 ROS 模块；若后端异常退出导致旧进程残留，可用 `scripts/cleanup_ros_modules.sh` 清理。
-7. 频率监测按 topic 独立线程运行，并优先使用 rclpy raw subscription，只统计消息到达时间，尽量避免对 MID360 `/livox/lidar` 这类大消息做 Python 反序列化。
+7. 频率监测按 topic 独立线程运行，并优先使用 rclpy raw subscription，只统计消息到达时间，尽量避免对 MID360 `/livox/lidar` 这类大消息做 Python 反序列化。默认采用 1 秒采样、4 秒休息的低占用脉冲监测，频率显示会每个采样周期更新一次。
 8. `depends_on` 只用于页面提示和启动前 warning，不会自动启动依赖模块；底盘控制等安全敏感模块应保持 `autostart: false`，由现场人员确认后手动启动。

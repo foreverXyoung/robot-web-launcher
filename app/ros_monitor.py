@@ -25,9 +25,17 @@ class RosTopicMonitor:
     monitor status instead of crashing FastAPI.
     """
 
-    def __init__(self, config: LauncherConfig, window_sec: float = 5.0) -> None:
+    def __init__(
+        self,
+        config: LauncherConfig,
+        window_sec: float = 5.0,
+        sample_sec: float = 1.0,
+        idle_sec: float = 4.0,
+    ) -> None:
         self.config = config
         self.window_sec = window_sec
+        self.sample_sec = sample_sec
+        self.idle_sec = idle_sec
         self.enabled = True
         self.started = False
         self.error: str | None = None
@@ -105,6 +113,8 @@ class RosTopicMonitor:
             "started": self.started,
             "error": self.error,
             "window_sec": self.window_sec,
+            "sample_sec": self.sample_sec,
+            "idle_sec": self.idle_sec,
         }
 
     def rates(self) -> list[dict]:
@@ -165,16 +175,18 @@ class RosTopicMonitor:
             )
             executor = SingleThreadedExecutor(context=context)
             executor.add_node(node)
-            subscribed = False
             key = (spec.module_id, spec.topic)
             qos = QoSProfile(
                 history=HistoryPolicy.KEEP_LAST,
                 depth=100,
                 reliability=ReliabilityPolicy.BEST_EFFORT,
             )
+            msg_type = None
+            msg_type_name = ""
+            subscription_mode = "raw"
 
             while not self._stop_event.is_set() and context.ok():
-                if not subscribed:
+                if msg_type is None:
                     topic_types = {name: types for name, types in node.get_topic_names_and_types()}
                     types = topic_types.get(spec.topic)
                     if not types:
@@ -184,31 +196,11 @@ class RosTopicMonitor:
                         continue
                     try:
                         msg_type = get_message(types[0])
-                        subscription_mode = "raw"
-                        try:
-                            node.create_subscription(
-                                msg_type,
-                                spec.topic,
-                                self._make_callback(spec.module_id, spec.topic),
-                                qos,
-                                raw=True,
-                            )
-                        except TypeError:
-                            # Older rclpy builds may not expose the raw argument.
-                            # Fall back to a normal subscription so monitoring
-                            # still works, but report the mode for diagnostics.
-                            subscription_mode = "normal"
-                            node.create_subscription(
-                                msg_type,
-                                spec.topic,
-                                self._make_callback(spec.module_id, spec.topic),
-                                qos,
-                            )
-                        subscribed = True
+                        msg_type_name = types[0]
                         with self._lock:
                             self._topic_status[key] = {
                                 "status": "waiting",
-                                "message": f"subscribed {types[0]} ({subscription_mode})",
+                                "message": f"resolved {msg_type_name}",
                             }
                     except Exception as exc:
                         with self._lock:
@@ -216,13 +208,66 @@ class RosTopicMonitor:
                         time.sleep(0.2)
                         continue
 
-                # spin_once handles at most a small amount of ready work per call.
-                # A 0.2s timeout makes high-rate topics look artificially slow
-                # (e.g. 500 Hz IMU can be reported as only tens of Hz). Keep this
-                # short so the monitor drains callbacks close to the real publish
-                # rate without blocking other housekeeping.
-                executor.spin_once(timeout_sec=0.001)
-                self._mark_stale_sample(key)
+                subscription = None
+                try:
+                    subscription_mode = "raw"
+                    try:
+                        subscription = node.create_subscription(
+                            msg_type,
+                            spec.topic,
+                            self._make_callback(spec.module_id, spec.topic),
+                            qos,
+                            raw=True,
+                        )
+                    except TypeError:
+                        # Older rclpy builds may not expose the raw argument.
+                        # Fall back to a normal subscription so monitoring
+                        # still works, but report the mode for diagnostics.
+                        subscription_mode = "normal"
+                        subscription = node.create_subscription(
+                            msg_type,
+                            spec.topic,
+                            self._make_callback(spec.module_id, spec.topic),
+                            qos,
+                        )
+                    with self._lock:
+                        self._topic_status[key] = {
+                            "status": "sampling",
+                            "message": f"sampling {msg_type_name} ({subscription_mode})",
+                        }
+
+                    sample_until = time.monotonic() + self.sample_sec
+                    while (
+                        not self._stop_event.is_set()
+                        and context.ok()
+                        and time.monotonic() < sample_until
+                    ):
+                        # spin_once handles at most a small amount of ready work per call.
+                        # Keep this short during the active sampling burst so high-rate
+                        # topics are counted accurately.
+                        executor.spin_once(timeout_sec=0.001)
+                        self._mark_stale_sample(key)
+                except Exception as exc:
+                    with self._lock:
+                        self._topic_status[key] = {"status": "error", "message": f"{type(exc).__name__}: {exc}"}
+                finally:
+                    if subscription is not None:
+                        try:
+                            node.destroy_subscription(subscription)
+                        except Exception:
+                            pass
+
+                with self._lock:
+                    status = self._topic_status.get(key, {})
+                    if status.get("status") not in {"error", "timeout"}:
+                        self._topic_status[key] = {
+                            "status": "idle",
+                            "message": (
+                                f"idle after {self.sample_sec:g}s sample "
+                                f"({msg_type_name or 'unknown'} {subscription_mode})"
+                            ),
+                        }
+                self._sleep_until_stop(self.idle_sec)
         except Exception as exc:
             self.error = f"{spec.topic}: {type(exc).__name__}: {exc}"
         finally:
@@ -266,6 +311,11 @@ class RosTopicMonitor:
             self._trim_samples(samples, now)
             if not samples:
                 self._topic_status[key] = {"status": "timeout", "message": "no recent data"}
+
+    def _sleep_until_stop(self, duration: float) -> None:
+        deadline = time.monotonic() + duration
+        while not self._stop_event.is_set() and time.monotonic() < deadline:
+            time.sleep(min(0.1, max(0.0, deadline - time.monotonic())))
 
     def _trim_samples(self, samples: deque[float], now: float) -> None:
         while samples and now - samples[0] > self.window_sec:

@@ -116,8 +116,7 @@ modules:
     name: Object Detection
     domain_id: 20
     workdir: /data/sinuo_project/object_detection/26_4_9
-    conda_env: zhaigou
-    cmd: ["python", "导航-all2-单侧点云-先验更远-目标范围-先验选点优化-读取内参-先验姿态优化.py"]
+    cmd: ["/home/nvidia1/miniforge3/envs/zhaigou/bin/python", "导航-all2-单侧点云-先验更远-目标范围-先验选点优化-读取内参-先验姿态优化.py"]
     autostart: true
     restart_on_crash: true
     depends_on: ["depth_camera", "domain_bridge"]

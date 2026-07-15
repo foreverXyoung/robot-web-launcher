@@ -77,7 +77,8 @@ async def set_monitor(toggle: MonitorToggle) -> dict:
 @app.post("/api/modules/{module_id}/start")
 async def start_module(module_id: str) -> dict:
     try:
-        return await manager.start(module_id)
+        await manager.start_many([module_id])
+        return manager.get_state(module_id)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -93,7 +94,9 @@ async def stop_module(module_id: str) -> dict:
 @app.post("/api/modules/{module_id}/restart")
 async def restart_module(module_id: str) -> dict:
     try:
-        return await manager.restart(module_id)
+        await manager.stop(module_id)
+        await manager.start_many([module_id])
+        return manager.get_state(module_id)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

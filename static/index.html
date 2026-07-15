@@ -102,6 +102,26 @@
       return res.json();
     }
 
+    async function runAction(label, action) {
+      try {
+        await action();
+        await refreshAll();
+      } catch (e) {
+        appendLog({ time: new Date().toLocaleTimeString(), module: "system", message: `${label}失败: ${formatError(e)}` });
+        await refreshAll();
+      }
+    }
+
+    function formatError(e) {
+      const text = String(e && e.message ? e.message : e);
+      try {
+        const payload = JSON.parse(text);
+        return payload.detail || text;
+      } catch (_err) {
+        return text;
+      }
+    }
+
     async function refreshAll() {
       await loadModules();
       await loadMonitorStatus();
@@ -226,18 +246,16 @@
       renderModules();
     }
 
-    async function startOne(id) { await api(`/api/modules/${id}/start`, { method: "POST" }); await refreshAll(); }
-    async function stopOne(id) { await api(`/api/modules/${id}/stop`, { method: "POST" }); await refreshAll(); }
-    async function restartOne(id) { await api(`/api/modules/${id}/restart`, { method: "POST" }); await refreshAll(); }
-    async function startCategory(category) { await api(`/api/categories/${category}/start`, { method: "POST" }); await refreshAll(); }
-    async function stopCategory(category) { await api(`/api/categories/${category}/stop`, { method: "POST" }); await refreshAll(); }
+    async function startOne(id) { await runAction(`启动 ${id}`, () => api(`/api/modules/${id}/start`, { method: "POST" })); }
+    async function stopOne(id) { await runAction(`停止 ${id}`, () => api(`/api/modules/${id}/stop`, { method: "POST" })); }
+    async function restartOne(id) { await runAction(`重启 ${id}`, () => api(`/api/modules/${id}/restart`, { method: "POST" })); }
+    async function startCategory(category) { await runAction(`启动分类 ${category}`, () => api(`/api/categories/${category}/start`, { method: "POST" })); }
+    async function stopCategory(category) { await runAction(`停止分类 ${category}`, () => api(`/api/categories/${category}/stop`, { method: "POST" })); }
     async function startSelected() {
-      await api("/api/start-selected", { method: "POST", body: JSON.stringify({ modules: [...selected] }) });
-      await refreshAll();
+      await runAction("启动勾选模块", () => api("/api/start-selected", { method: "POST", body: JSON.stringify({ modules: [...selected] }) }));
     }
     async function stopSelected() {
-      await api("/api/stop-selected", { method: "POST", body: JSON.stringify({ modules: [...selected] }) });
-      await refreshAll();
+      await runAction("停止勾选模块", () => api("/api/stop-selected", { method: "POST", body: JSON.stringify({ modules: [...selected] }) }));
     }
 
     function clearLogs() { document.getElementById("logs").innerHTML = ""; }

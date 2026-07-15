@@ -43,7 +43,7 @@ modules:
     autostart: true
     restart_on_crash: true
     startup_delay: 2
-    monitor_topics: ["/fix"]
+    monitor_topics: ["/gps/rtk_odom"]
 
   fast_lio:
     name: FAST-LIO

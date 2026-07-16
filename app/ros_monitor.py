@@ -29,14 +29,10 @@ class RosTopicMonitor:
         self,
         config: LauncherConfig,
         window_sec: float = 5.0,
-        sample_sec: float = 1.0,
-        idle_sec: float = 4.0,
     ) -> None:
         self.config = config
         self.window_sec = window_sec
-        self.sample_sec = sample_sec
-        self.idle_sec = idle_sec
-        self.enabled = True
+        self.enabled = False
         self.started = False
         self.error: str | None = None
         self._lock = threading.Lock()
@@ -53,6 +49,9 @@ class RosTopicMonitor:
         self.enabled = True
         self.error = None
         self._stop_event.clear()
+        with self._lock:
+            self._samples.clear()
+            self._topic_status.clear()
 
         try:
             import rclpy  # noqa: F401
@@ -113,8 +112,6 @@ class RosTopicMonitor:
             "started": self.started,
             "error": self.error,
             "window_sec": self.window_sec,
-            "sample_sec": self.sample_sec,
-            "idle_sec": self.idle_sec,
         }
 
     def rates(self) -> list[dict]:
@@ -184,6 +181,7 @@ class RosTopicMonitor:
             msg_type = None
             msg_type_name = ""
             subscription_mode = "raw"
+            subscription = None
 
             while not self._stop_event.is_set() and context.ok():
                 if msg_type is None:
@@ -208,7 +206,6 @@ class RosTopicMonitor:
                         time.sleep(0.2)
                         continue
 
-                subscription = None
                 try:
                     subscription_mode = "raw"
                     try:
@@ -232,45 +229,28 @@ class RosTopicMonitor:
                         )
                     with self._lock:
                         self._topic_status[key] = {
-                            "status": "sampling",
-                            "message": f"sampling {msg_type_name} ({subscription_mode})",
+                            "status": "waiting",
+                            "message": f"subscribed {msg_type_name} ({subscription_mode})",
                         }
 
-                    sample_until = time.monotonic() + self.sample_sec
-                    while (
-                        not self._stop_event.is_set()
-                        and context.ok()
-                        and time.monotonic() < sample_until
-                    ):
-                        # spin_once handles at most a small amount of ready work per call.
-                        # Keep this short during the active sampling burst so high-rate
-                        # topics are counted accurately.
+                    while not self._stop_event.is_set() and context.ok():
+                        # A short timeout keeps high-rate topics accurate. Raw subscriptions
+                        # avoid Python message deserialization, but continuous monitoring can
+                        # still use noticeable CPU and is therefore disabled by default.
                         executor.spin_once(timeout_sec=0.001)
                         self._mark_stale_sample(key)
                 except Exception as exc:
                     with self._lock:
                         self._topic_status[key] = {"status": "error", "message": f"{type(exc).__name__}: {exc}"}
-                finally:
-                    if subscription is not None:
-                        try:
-                            node.destroy_subscription(subscription)
-                        except Exception:
-                            pass
-
-                with self._lock:
-                    status = self._topic_status.get(key, {})
-                    if status.get("status") not in {"error", "timeout"}:
-                        self._topic_status[key] = {
-                            "status": "idle",
-                            "message": (
-                                f"idle after {self.sample_sec:g}s sample "
-                                f"({msg_type_name or 'unknown'} {subscription_mode})"
-                            ),
-                        }
-                self._sleep_until_stop(self.idle_sec)
+                break
         except Exception as exc:
             self.error = f"{spec.topic}: {type(exc).__name__}: {exc}"
         finally:
+            if node is not None and subscription is not None:
+                try:
+                    node.destroy_subscription(subscription)
+                except Exception:
+                    pass
             if executor is not None and node is not None:
                 try:
                     executor.remove_node(node)
@@ -311,11 +291,6 @@ class RosTopicMonitor:
             self._trim_samples(samples, now)
             if not samples:
                 self._topic_status[key] = {"status": "timeout", "message": "no recent data"}
-
-    def _sleep_until_stop(self, duration: float) -> None:
-        deadline = time.monotonic() + duration
-        while not self._stop_event.is_set() and time.monotonic() < deadline:
-            time.sleep(min(0.1, max(0.0, deadline - time.monotonic())))
 
     def _trim_samples(self, samples: deque[float], now: float) -> None:
         while samples and now - samples[0] > self.window_sec:

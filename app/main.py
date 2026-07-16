@@ -31,7 +31,7 @@ class MonitorToggle(BaseModel):
 
 @app.on_event("startup")
 async def on_startup() -> None:
-    manager.set_monitor_enabled(True)
+    manager.set_monitor_enabled(False)
     if os.environ.get("ROBOT_LAUNCHER_AUTOSTART", "0") == "1":
         await manager.autostart()
 

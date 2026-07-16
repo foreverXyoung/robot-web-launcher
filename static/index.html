@@ -6,20 +6,23 @@
   <title>Robot Web Launcher</title>
   <style>
     :root { color-scheme: dark; font-family: system-ui, "Microsoft YaHei", sans-serif; }
-    body { margin: 0; background: #0b1020; color: #e9eefc; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-width: 0; background: #0b1020; color: #e9eefc; }
     header { padding: 18px 24px; background: #111936; display: flex; justify-content: space-between; align-items: center; }
     h1 { font-size: 20px; margin: 0; }
     main { padding: 20px; display: grid; grid-template-columns: minmax(820px, 1.2fr) minmax(420px, 0.8fr); gap: 18px; }
-    .card { background: #121a33; border: 1px solid #273254; border-radius: 14px; overflow: hidden; }
+    .card { min-width: 0; background: #121a33; border: 1px solid #273254; border-radius: 14px; overflow: hidden; }
     .toolbar { padding: 12px; display: flex; gap: 8px; flex-wrap: wrap; border-bottom: 1px solid #273254; }
     .category-bar { padding: 12px; display: flex; gap: 10px; flex-wrap: wrap; border-bottom: 1px solid #273254; background: #0f1730; }
     .category-card { border: 1px solid #2b375c; border-radius: 12px; padding: 10px; min-width: 210px; background: #151f3d; }
     .category-title { font-weight: 700; margin-bottom: 8px; }
-    button { border: 0; border-radius: 9px; padding: 8px 12px; color: white; background: #2c63ff; cursor: pointer; }
+    button { min-height: 38px; border: 0; border-radius: 9px; padding: 8px 12px; color: white; background: #2c63ff; cursor: pointer; touch-action: manipulation; }
     button.stop { background: #d94b5d; }
     button.restart { background: #7a5cff; }
     button.secondary { background: #31405f; }
     button:disabled { opacity: .45; cursor: not-allowed; }
+    input[type="checkbox"] { width: 18px; height: 18px; accent-color: #2c63ff; cursor: pointer; }
+    .table-wrap { width: 100%; overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; font-size: 14px; }
     th, td { padding: 10px; border-bottom: 1px solid #24304f; text-align: left; vertical-align: middle; }
     th { color: #aab8df; font-weight: 600; }
@@ -32,12 +35,43 @@
     .algorithm { background: #4b4775; color: #eee8ff; }
     .rate-ok { color: #8dffc5; }
     .rate-bad { color: #ffb1bd; }
-    .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+    .actions, .action-buttons { display: flex; gap: 6px; flex-wrap: wrap; }
     #logs { height: calc(100vh - 165px); overflow: auto; padding: 12px; background: #060912; font-family: ui-monospace, Consolas, monospace; font-size: 13px; white-space: pre-wrap; }
     .log-line { margin: 0 0 4px; }
     .muted { color: #9aa8ce; }
     .module { color: #89b4ff; }
-    @media (max-width: 1180px) { main { grid-template-columns: 1fr; } #logs { height: 420px; } }
+    @media (max-width: 1180px) {
+      main { grid-template-columns: 1fr; }
+      table { min-width: 900px; }
+      #logs { height: 420px; }
+    }
+    @media (max-width: 720px) {
+      header { padding: 12px; gap: 6px 12px; align-items: flex-start; flex-wrap: wrap; }
+      h1 { width: 100%; font-size: 17px; }
+      main { padding: 8px; gap: 10px; }
+      .card { border-radius: 10px; }
+      .category-bar { display: grid; grid-template-columns: 1fr; padding: 8px; gap: 8px; }
+      .category-card { min-width: 0; padding: 10px; }
+      .category-card .actions { display: grid; grid-template-columns: 1fr 1fr; }
+      .category-card .actions .secondary { grid-column: 1 / -1; }
+      .toolbar { padding: 8px; gap: 7px; }
+      .toolbar button { flex: 1 1 calc(50% - 7px); }
+      #monitorState { flex: 1 0 100%; order: 10; padding: 2px 3px; font-size: 13px; }
+      .table-wrap { overflow: visible; padding: 8px; }
+      table, tbody, tr, td { display: block; width: 100%; }
+      table { min-width: 0; }
+      thead { display: none; }
+      tbody { display: grid; gap: 9px; }
+      tr { padding: 7px 0; border: 1px solid #2b375c; border-radius: 10px; background: #10182f; overflow: hidden; }
+      tr:hover { background: #10182f; }
+      td { display: grid; grid-template-columns: 82px minmax(0, 1fr); gap: 8px; align-items: center; padding: 6px 10px; border: 0; overflow-wrap: anywhere; }
+      td::before { content: attr(data-label); color: #8796bf; font-size: 12px; font-weight: 600; }
+      td.module-actions { align-items: start; }
+      .action-buttons { display: grid; grid-template-columns: repeat(3, 1fr); }
+      .action-buttons button { min-width: 0; padding: 8px 5px; }
+      input[type="checkbox"] { width: 22px; height: 22px; }
+      #logs { height: 45vh; min-height: 280px; max-height: 520px; font-size: 12px; overflow-wrap: anywhere; }
+    }
   </style>
 </head>
 <body>
@@ -59,6 +93,7 @@
         <button class="secondary" onclick="clearSelection()">清空</button>
         <button class="secondary" onclick="refreshAll()">刷新状态/频率</button>
       </div>
+      <div class="table-wrap">
       <table>
         <thead>
           <tr>
@@ -75,6 +110,7 @@
         </thead>
         <tbody id="moduleRows"></tbody>
       </table>
+      </div>
     </section>
 
     <section class="card">
@@ -89,7 +125,7 @@
     let modules = [];
     let categories = [];
     let rates = [];
-    let monitorStatus = { enabled: true, started: false, error: null };
+    let monitorStatus = { enabled: false, started: false, error: null };
     const selected = new Set();
     const categoryLabels = { sensor: "传感器驱动", algorithm: "算法模块" };
 
@@ -136,6 +172,11 @@
     }
 
     async function loadSensorRates() {
+      if (!monitorStatus.enabled) {
+        rates = [];
+        renderModules();
+        return;
+      }
       try {
         rates = await api("/api/sensor-rates");
       } catch (e) {
@@ -158,6 +199,7 @@
       if (!monitorStatus.enabled) rates = [];
       renderMonitorStatus();
       renderModules();
+      if (monitorStatus.enabled) await loadSensorRates();
     }
 
     function renderMonitorStatus() {
@@ -169,7 +211,7 @@
       } else if (monitorStatus.error) {
         state.textContent = `频率监测异常：${monitorStatus.error}`;
       } else {
-        state.textContent = `频率监测器已开启，统计窗口 ${monitorStatus.window_sec}s，采样 ${monitorStatus.sample_sec}s / 休息 ${monitorStatus.idle_sec}s`;
+        state.textContent = `频率监测器已开启，连续统计窗口 ${monitorStatus.window_sec}s`;
       }
     }
 
@@ -196,18 +238,20 @@
       for (const m of modules) {
         const tr = document.createElement("tr");
         tr.innerHTML = `
-          <td><input type="checkbox" ${selected.has(m.id) ? "checked" : ""} onchange="setSelected('${m.id}', this.checked)" /></td>
-          <td><div>${escapeHtml(m.name)}</div><div class="muted">${m.id}</div></td>
-          <td><span class="pill ${m.category}">${categoryLabels[m.category] || m.category}</span></td>
-          <td>${m.domain_id ?? "-"}</td>
-          <td><span class="status ${m.status}">${m.status}</span></td>
-          <td>${formatRates(m.id)}</td>
-          <td>${m.pid ?? "-"}</td>
-          <td class="muted">${(m.depends_on || []).join(", ") || "-"}</td>
-          <td class="actions">
-            <button onclick="startOne('${m.id}')">启动</button>
-            <button class="stop" onclick="stopOne('${m.id}')">停止</button>
-            <button class="restart" onclick="restartOne('${m.id}')">重启</button>
+          <td data-label="选择"><input type="checkbox" ${selected.has(m.id) ? "checked" : ""} onchange="setSelected('${m.id}', this.checked)" /></td>
+          <td data-label="模块"><div>${escapeHtml(m.name)}</div><div class="muted">${m.id}</div></td>
+          <td data-label="分类"><span class="pill ${m.category}">${categoryLabels[m.category] || m.category}</span></td>
+          <td data-label="Domain">${m.domain_id ?? "-"}</td>
+          <td data-label="状态"><span class="status ${m.status}">${m.status}</span></td>
+          <td data-label="频率">${formatRates(m.id)}</td>
+          <td data-label="PID">${m.pid ?? "-"}</td>
+          <td data-label="依赖" class="muted">${(m.depends_on || []).join(", ") || "-"}</td>
+          <td data-label="操作" class="module-actions">
+            <div class="action-buttons">
+              <button onclick="startOne('${m.id}')">启动</button>
+              <button class="stop" onclick="stopOne('${m.id}')">停止</button>
+              <button class="restart" onclick="restartOne('${m.id}')">重启</button>
+            </div>
           </td>`;
         tbody.appendChild(tr);
       }

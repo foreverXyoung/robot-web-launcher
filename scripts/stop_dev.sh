@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PORT="${ROBOT_LAUNCHER_PORT:-8080}"
+cd "$(dirname "$0")/.."
+CONFIG_PATH="${ROBOT_LAUNCHER_CONFIG:-$(pwd)/config/modules.yaml}"
+PYTHON_BIN="${ROBOT_LAUNCHER_PYTHON:-python3}"
+server_output="$("${PYTHON_BIN}" scripts/runtime_config.py "${CONFIG_PATH}" server)"
+mapfile -t server_config <<< "${server_output}"
+PORT="${ROBOT_LAUNCHER_PORT:-${server_config[1]}}"
 PATTERN="uvicorn app.main:app"
 
 echo "Stopping Robot Web Launcher dev server on port ${PORT}..."

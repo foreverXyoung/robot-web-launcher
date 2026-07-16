@@ -1,5 +1,11 @@
 host: 0.0.0.0
 port: 8080
+paths:
+  project_root: /data/sinuo_project
+  ros_setup: /opt/ros/humble/setup.bash
+  object_detection_python: /home/nvidia1/miniforge3/envs/zhaigou/bin/python
+monitor_setups:
+  - ${project_root}/mid_ws/install/setup.bash
 log_dir: runtime/logs
 state_dir: runtime/state
 stop_timeout_sec: 8
@@ -9,10 +15,10 @@ modules:
     name: MID360
     category: sensor
     domain_id: 10
-    workdir: /data/sinuo_project/mid_ws
+    workdir: ${project_root}/mid_ws
     setup: install/setup.bash
     env:
-      LD_LIBRARY_PATH: /data/sinuo_project/mid_ws/src/livox_ros_driver2/Livox-SDK2/lib/arm64:${LD_LIBRARY_PATH}
+      LD_LIBRARY_PATH: ${project_root}/mid_ws/src/livox_ros_driver2/Livox-SDK2/lib/arm64:${LD_LIBRARY_PATH}
     cmd: ["ros2", "launch", "livox_ros_driver2", "msg_MID360_launch.py"]
     autostart: true
     restart_on_crash: true
@@ -24,7 +30,7 @@ modules:
     name: N300pro IMU
     category: sensor
     domain_id: 10
-    workdir: /data/sinuo_project/n300_pro_ws
+    workdir: ${project_root}/n300_pro_ws
     setup: install/setup.bash
     cmd: ["ros2", "launch", "hipnuc_imu", "imu_spec_msg.launch.py"]
     autostart: true
@@ -37,7 +43,7 @@ modules:
     name: G90 RTK/GPS
     category: sensor
     domain_id: 10
-    workdir: /data/sinuo_project/G90_ws
+    workdir: ${project_root}/G90_ws
     setup: install/setup.bash
     cmd: ["ros2", "launch", "wheeltec_gps_driver", "wheeltec_dual_rtk_driver_unicore.launch.py"]
     autostart: true
@@ -49,7 +55,7 @@ modules:
     name: FAST-LIO
     category: algorithm
     domain_id: 10
-    workdir: /data/sinuo_project/mid_ws
+    workdir: ${project_root}/mid_ws
     setup: install/setup.bash
     cmd: ["ros2", "launch", "fast_lio", "mapping.launch.py", "rviz:=false"]
     autostart: true
@@ -63,7 +69,7 @@ modules:
   robot_controller:
     name: 底盘控制
     domain_id: 10
-    workdir: /data/sinuo_project/robot_contor_ws
+    workdir: ${project_root}/robot_contor_ws
     setup: install/setup.bash
     cmd: ["ros2", "run", "keya_robot_controller", "robot_controller_node"]
     autostart: false
@@ -75,7 +81,7 @@ modules:
     name: RGB-D
     category: sensor
     domain_id: 20
-    workdir: /data/sinuo_project/orb_ws
+    workdir: ${project_root}/orb_ws
     setup: install/setup.bash
     cmd:
       - ros2
@@ -104,7 +110,7 @@ modules:
   domain_bridge:
     name: 域桥 plus
     domain_id: 20
-    workdir: /data/sinuo_project/bridge_info_joint_new
+    workdir: ${project_root}/bridge_info_joint_new
     setup: install/setup.bash
     cmd: ["ros2", "run", "domain_bridge_cpp", "domain_bridge_event_bundle"]
     autostart: true
@@ -115,8 +121,8 @@ modules:
   object_detection:
     name: 目标检测
     domain_id: 20
-    workdir: /data/sinuo_project/object_detection/26_4_9
-    cmd: ["/home/nvidia1/miniforge3/envs/zhaigou/bin/python"]
+    workdir: ${project_root}/object_detection/26_4_9
+    cmd: ["${object_detection_python}"]
     python_script: "导航-all2-单侧点云-先验更远-目标范围-先验选点优化-读取内参-先验姿态优化.py"
     autostart: true
     restart_on_crash: true
@@ -126,7 +132,7 @@ modules:
   auto_explore:
     name: 导航模块
     domain_id: 10
-    workdir: /data/sinuo_project/Auto_Explor_ws
+    workdir: ${project_root}/Auto_Explor_ws
     setup: install/setup.bash
     cmd: ["ros2", "launch", "vehicle_simulator", "system_real_robot.launch"]
     autostart: false
@@ -138,7 +144,7 @@ modules:
   waypoint:
     name: Waypoint
     domain_id: 10
-    workdir: /data/sinuo_project/Auto_Explor_ws
+    workdir: ${project_root}/Auto_Explor_ws
     setup: install/setup.bash
     cmd: ["ros2", "launch", "waypoint_example", "waypoint_example_garage.launch"]
     autostart: false

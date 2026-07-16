@@ -13,6 +13,8 @@
 - 使用 Linux 进程组停止 ROS launch 及其子进程
 - WebSocket 实时日志
 - 常驻 rclpy topic 频率监测，默认关闭，可按需在页面开启
+- 公共路径变量、模块路径和服务器端口统一由 YAML 配置
+- 网页配置预检，检查工作目录、setup、可执行文件和 Python 脚本
 - systemd 开机自启模板
 
 ## 安装
@@ -36,7 +38,7 @@ python3 -m pip install -r requirements.txt
 ./scripts/run_dev.sh
 ```
 
-`run_dev.sh` 会自动尝试 source `/opt/ros/humble/setup.bash` 和 `/data/sinuo_project/mid_ws/install/setup.bash`，这样后端的常驻 rclpy 监测器可以导入 ROS 2 Python 包以及 Livox 自定义消息。
+`run_dev.sh` 会读取 `config/modules.yaml` 中的 `paths.ros_setup`、`monitor_setups`、`host` 和 `port`，不再单独写死 ROS 与 MID360 路径。监测 setup 用于让后端导入 Livox 等自定义消息。
 默认是单进程模式并关闭 access log，适合现场调试。若确实需要热重载：
 
 ```bash
@@ -75,13 +77,10 @@ http://AGX_IP:8080
 
 ## 生产运行
 
-复制 systemd 服务：
+使用安装脚本生成并安装 systemd 服务。脚本默认采用当前登录用户，也可以通过 `SERVICE_USER` 指定：
 
 ```bash
-sudo cp systemd/robot-web-launcher.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable robot-web-launcher
-sudo systemctl start robot-web-launcher
+SERVICE_USER=nvidia1 PROJECT_DIR=/data/sinuo_project/robot_web_launcher ./scripts/install_service.sh
 ```
 
 查看服务日志：
@@ -107,10 +106,23 @@ Environment=ROBOT_LAUNCHER_AUTOSTART=1
 模块在 `config/modules.yaml` 里配置。每个模块至少需要：
 
 ```yaml
+host: 0.0.0.0
+port: 8080
+paths:
+  project_root: /data/sinuo_project
+  ros_setup: /opt/ros/humble/setup.bash
+  object_detection_python: /home/nvidia1/miniforge3/envs/zhaigou/bin/python
+monitor_setups:
+  - ${project_root}/mid_ws/install/setup.bash
+```
+
+`paths` 中的变量可以在 `workdir`、`setup`、`cmd`、`env` 和 `python_script` 中通过 `${变量名}` 使用。未定义变量会原样保留，因此 `${LD_LIBRARY_PATH}` 仍会在模块启动时按运行环境展开。
+
+```yaml
 module_id:
   name: 显示名称
   domain_id: 10
-  workdir: /data/sinuo_project/xxx_ws
+  workdir: ${project_root}/xxx_ws
   setup: install/setup.bash
   cmd: ["ros2", "launch", "pkg", "xxx.launch.py"]
 ```
@@ -121,8 +133,8 @@ module_id:
 object_detection:
   name: 目标检测
   domain_id: 20
-  workdir: /data/sinuo_project/object_detection/26_4_9
-  cmd: ["/home/nvidia1/miniforge3/envs/zhaigou/bin/python"]
+  workdir: ${project_root}/object_detection/26_4_9
+  cmd: ["${object_detection_python}"]
   python_script: "导航-all2-单侧点云-先验更远-目标范围-先验选点优化-读取内参-先验姿态优化.py"
 ```
 
@@ -139,7 +151,7 @@ conda_sh: /home/nvidia/anaconda3/etc/profile.d/conda.sh
 2. 不要把这个 Web 页面暴露到公网。现场局域网使用即可。
 3. 自动启动时建议关闭 RViz，比如 `rviz:=false`。
 4. 串口设备建议用 udev 固定名称，不要长期依赖 `/dev/ttyUSB0`。
-5. 频率监测需要后端 Python 能导入 `rclpy` 和被监测话题的消息类型。开发脚本和 systemd 模板会 source `/opt/ros/humble/setup.bash` 以及 MID360 的 `mid_ws`；如果你的 ROS 安装路径或工作空间路径不同，需要同步修改脚本。
+5. 频率监测需要后端 Python 能导入 `rclpy` 和被监测话题的消息类型。开发脚本和 systemd 服务会读取 YAML 中的 `paths.ros_setup` 与 `monitor_setups`；ROS 安装路径或工作空间变化时只需修改配置。
 6. 后端退出时会尝试停止所有由它管理的 ROS 模块；若后端异常退出导致旧进程残留，可用 `scripts/cleanup_ros_modules.sh` 清理。
 7. 频率监测按 topic 独立线程连续运行，并优先使用 rclpy raw subscription，只统计消息到达时间，尽量避免对 MID360 `/livox/lidar` 这类大消息做 Python 反序列化。连续监测高频话题仍会占用明显 CPU，因此默认关闭，需要时再从页面开启。
 8. `depends_on` 只用于页面提示和启动前 warning，不会自动启动依赖模块；底盘控制等安全敏感模块应保持 `autostart: false`，由现场人员确认后手动启动。

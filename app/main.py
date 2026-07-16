@@ -56,6 +56,11 @@ async def list_categories() -> list[dict]:
     return manager.list_categories()
 
 
+@app.get("/api/config-check")
+async def config_check() -> dict:
+    return manager.validate_config()
+
+
 @app.get("/api/sensor-rates")
 async def sensor_rates() -> list[dict]:
     try:

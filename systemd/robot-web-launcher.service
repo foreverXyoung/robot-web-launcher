@@ -5,12 +5,13 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=nvidia
+User=nvidia1
 WorkingDirectory=/data/sinuo_project/robot_web_launcher
 Environment=PYTHONUNBUFFERED=1
 Environment=ROBOT_LAUNCHER_CONFIG=/data/sinuo_project/robot_web_launcher/config/modules.yaml
 Environment=ROBOT_LAUNCHER_AUTOSTART=0
-ExecStart=/bin/bash -lc 'set +u; source /opt/ros/humble/setup.bash; if [[ -f /data/sinuo_project/mid_ws/install/setup.bash ]]; then source /data/sinuo_project/mid_ws/install/setup.bash; fi; set -u; exec /usr/bin/python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8080 --workers 1'
+Environment=ROBOT_LAUNCHER_PYTHON=/data/sinuo_project/robot_web_launcher/.venv/bin/python
+ExecStart=/usr/bin/env bash scripts/run_dev.sh
 Restart=always
 RestartSec=3
 

@@ -3,6 +3,9 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+export ROBOT_LAUNCHER_CONFIG="${ROBOT_LAUNCHER_CONFIG:-$(pwd)/config/modules.yaml}"
+PYTHON_BIN="${ROBOT_LAUNCHER_PYTHON:-python3}"
+
 source_setup() {
   local setup_file="$1"
   if [[ -f "${setup_file}" ]]; then
@@ -12,16 +15,14 @@ source_setup() {
   fi
 }
 
-if [[ -f /opt/ros/humble/setup.bash ]]; then
-  set +u
-  source /opt/ros/humble/setup.bash
-  set -u
-fi
+server_output="$("${PYTHON_BIN}" scripts/runtime_config.py "${ROBOT_LAUNCHER_CONFIG}" server)"
+mapfile -t server_config <<< "${server_output}"
+setup_output="$("${PYTHON_BIN}" scripts/runtime_config.py "${ROBOT_LAUNCHER_CONFIG}" setups)"
+mapfile -t configured_setups <<< "${setup_output}"
 
-# The persistent rclpy topic monitor runs inside this backend process. It needs
-# custom message packages in PYTHONPATH/AMENT_PREFIX_PATH too, not only base ROS.
-# MID360 commonly publishes livox_interfaces/msg/CustomMsg, which lives in mid_ws.
-source_setup /data/sinuo_project/mid_ws/install/setup.bash
+for setup_file in "${configured_setups[@]}"; do
+  source_setup "${setup_file}"
+done
 
 # Optional colon-separated list for additional workspaces containing custom msgs.
 # Example:
@@ -33,9 +34,8 @@ if [[ -n "${ROBOT_LAUNCHER_EXTRA_SETUPS:-}" ]]; then
   done
 fi
 
-export ROBOT_LAUNCHER_CONFIG="${ROBOT_LAUNCHER_CONFIG:-$(pwd)/config/modules.yaml}"
-HOST="${ROBOT_LAUNCHER_HOST:-0.0.0.0}"
-PORT="${ROBOT_LAUNCHER_PORT:-8080}"
+HOST="${ROBOT_LAUNCHER_HOST:-${server_config[0]}}"
+PORT="${ROBOT_LAUNCHER_PORT:-${server_config[1]}}"
 RELOAD="${ROBOT_LAUNCHER_RELOAD:-0}"
 
 args=(app.main:app --host "${HOST}" --port "${PORT}" --no-access-log)
@@ -43,4 +43,4 @@ if [[ "${RELOAD}" == "1" ]]; then
   args+=(--reload)
 fi
 
-exec python3 -m uvicorn "${args[@]}"
+exec "${PYTHON_BIN}" -m uvicorn "${args[@]}"

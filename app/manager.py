@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 import re
+import shutil
 import signal
 from dataclasses import asdict, dataclass
 from datetime import datetime
@@ -74,6 +75,58 @@ class ProcessManager:
             )
             item["modules"].append(module_id)
         return list(categories.values())
+
+    def validate_config(self) -> dict:
+        checks: list[dict] = []
+
+        def add(scope: str, field: str, path: Path | str, ok: bool, severity: str = "error") -> None:
+            checks.append(
+                {
+                    "scope": scope,
+                    "field": field,
+                    "value": str(path),
+                    "ok": ok,
+                    "severity": "ok" if ok else severity,
+                }
+            )
+
+        add("launcher", "ros_setup", self.config.ros_setup, self.config.ros_setup.is_file())
+        for index, setup in enumerate(self.config.monitor_setups):
+            add("launcher", f"monitor_setups[{index}]", setup, setup.is_file(), "warning")
+
+        for module_id, module in self.config.modules.items():
+            add(module_id, "workdir", module.workdir, module.workdir.is_dir())
+
+            if module.setup:
+                setup_path = Path(module.setup).expanduser()
+                if not setup_path.is_absolute():
+                    setup_path = module.workdir / setup_path
+                add(module_id, "setup", setup_path, setup_path.is_file())
+
+            executable = module.cmd[0]
+            if "/" in executable or "\\" in executable:
+                executable_path = Path(executable).expanduser()
+                if not executable_path.is_absolute():
+                    executable_path = module.workdir / executable_path
+                add(module_id, "cmd[0]", executable_path, executable_path.is_file())
+            else:
+                resolved = shutil.which(executable)
+                add(module_id, "cmd[0]", resolved or executable, resolved is not None)
+
+            if module.python_script:
+                script_path = Path(module.python_script).expanduser()
+                if not script_path.is_absolute():
+                    script_path = module.workdir / script_path
+                add(module_id, "python_script", script_path, script_path.is_file())
+
+        errors = [item for item in checks if not item["ok"] and item["severity"] == "error"]
+        warnings = [item for item in checks if not item["ok"] and item["severity"] == "warning"]
+        return {
+            "ok": not errors,
+            "errors": len(errors),
+            "warnings": len(warnings),
+            "checks": checks,
+        }
 
     def get_state(self, module_id: str) -> dict:
         self._require_module(module_id)

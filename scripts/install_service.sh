@@ -5,6 +5,7 @@ PROJECT_DIR="${PROJECT_DIR:-/data/sinuo_project/robot_web_launcher}"
 SERVICE_NAME="${SERVICE_NAME:-robot-web-launcher}"
 SERVICE_FILE="${SERVICE_NAME}.service"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
+SERVICE_USER="${SERVICE_USER:-${SUDO_USER:-$(id -un)}}"
 
 if [[ ! -d "${PROJECT_DIR}" ]]; then
   echo "Project directory does not exist: ${PROJECT_DIR}" >&2
@@ -23,9 +24,8 @@ echo "[2/5] Installing Python dependencies..."
 echo "[3/5] Rendering systemd service..."
 tmp_service="$(mktemp)"
 sed \
-  -e "s#WorkingDirectory=/data/sinuo_project/robot_web_launcher#WorkingDirectory=${PROJECT_DIR}#g" \
-  -e "s#Environment=ROBOT_LAUNCHER_CONFIG=/data/sinuo_project/robot_web_launcher/config/modules.yaml#Environment=ROBOT_LAUNCHER_CONFIG=${PROJECT_DIR}/config/modules.yaml#g" \
-  -e "s#/usr/bin/python3 -m uvicorn#${PROJECT_DIR}/.venv/bin/python -m uvicorn#g" \
+  -e "s#^User=.*#User=${SERVICE_USER}#" \
+  -e "s#/data/sinuo_project/robot_web_launcher#${PROJECT_DIR}#g" \
   "systemd/robot-web-launcher.service" > "${tmp_service}"
 
 echo "[4/5] Installing systemd service..."
@@ -38,5 +38,7 @@ echo "[5/5] Starting service..."
 sudo systemctl restart "${SERVICE_NAME}"
 sudo systemctl status "${SERVICE_NAME}" --no-pager
 
+server_output="$(.venv/bin/python scripts/runtime_config.py config/modules.yaml server)"
+mapfile -t server_config <<< "${server_output}"
 echo
-echo "Done. Open http://<AGX_IP>:8080"
+echo "Done. Open http://<AGX_IP>:${server_config[1]}"

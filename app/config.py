@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -33,6 +34,9 @@ class ModuleConfig:
 class LauncherConfig:
     host: str
     port: int
+    paths: dict[str, str]
+    ros_setup: Path
+    monitor_setups: list[Path]
     log_dir: Path
     state_dir: Path
     stop_timeout_sec: float
@@ -47,13 +51,50 @@ def _as_str_list(value: Any, key: str) -> list[str]:
     return value
 
 
+_VARIABLE_PATTERN = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+
+
+def _expand_config_vars(value: str, variables: dict[str, str]) -> str:
+    return _VARIABLE_PATTERN.sub(
+        lambda match: variables.get(match.group(1), match.group(0)),
+        value,
+    )
+
+
+def _load_path_variables(raw: Any) -> dict[str, str]:
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise ValueError("paths must be a mapping of string values")
+    variables = {str(key): str(value) for key, value in raw.items()}
+    for _ in range(max(1, len(variables) + 1)):
+        expanded = {key: _expand_config_vars(value, variables) for key, value in variables.items()}
+        if expanded == variables:
+            break
+        variables = expanded
+    unresolved = {
+        name
+        for value in variables.values()
+        for name in _VARIABLE_PATTERN.findall(value)
+        if name in variables
+    }
+    if unresolved:
+        raise ValueError(f"cyclic path variables: {', '.join(sorted(unresolved))}")
+    return variables
+
+
 def load_config(path: str | Path) -> LauncherConfig:
     config_path = Path(path).expanduser().resolve()
     raw = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
 
     base_dir = config_path.parent.parent
-    log_dir = Path(raw.get("log_dir", base_dir / "runtime" / "logs")).expanduser()
-    state_dir = Path(raw.get("state_dir", base_dir / "runtime" / "state")).expanduser()
+    path_variables = _load_path_variables(raw.get("paths"))
+    log_dir = Path(
+        _expand_config_vars(str(raw.get("log_dir", base_dir / "runtime" / "logs")), path_variables)
+    ).expanduser()
+    state_dir = Path(
+        _expand_config_vars(str(raw.get("state_dir", base_dir / "runtime" / "state")), path_variables)
+    ).expanduser()
     if not log_dir.is_absolute():
         log_dir = base_dir / log_dir
     if not state_dir.is_absolute():
@@ -69,20 +110,31 @@ def load_config(path: str | Path) -> LauncherConfig:
         python_script = item.get("python_script")
         if python_script is not None and not isinstance(python_script, str):
             raise ValueError(f"module {module_id}.python_script must be a string")
-        effective_cmd = [*cmd]
+        effective_cmd = [_expand_config_vars(value, path_variables) for value in cmd]
         if python_script:
+            python_script = _expand_config_vars(python_script, path_variables)
             effective_cmd.append(python_script)
+
+        setup = item.get("setup")
+        if setup is not None:
+            setup = _expand_config_vars(str(setup), path_variables)
+        conda_sh = item.get("conda_sh")
+        if conda_sh is not None:
+            conda_sh = _expand_config_vars(str(conda_sh), path_variables)
 
         modules[module_id] = ModuleConfig(
             id=module_id,
             name=str(item.get("name", module_id)),
             category=str(item.get("category", "algorithm")),
             domain_id=item.get("domain_id"),
-            workdir=Path(item["workdir"]).expanduser(),
-            env={str(k): str(v) for k, v in (item.get("env") or {}).items()},
-            setup=item.get("setup"),
+            workdir=Path(_expand_config_vars(str(item["workdir"]), path_variables)).expanduser(),
+            env={
+                str(k): _expand_config_vars(str(v), path_variables)
+                for k, v in (item.get("env") or {}).items()
+            },
+            setup=setup,
             conda_env=item.get("conda_env"),
-            conda_sh=item.get("conda_sh"),
+            conda_sh=conda_sh,
             python_script=python_script,
             cmd=effective_cmd,
             autostart=bool(item.get("autostart", False)),
@@ -99,9 +151,18 @@ def load_config(path: str | Path) -> LauncherConfig:
             if dep not in modules:
                 raise ValueError(f"module {module.id} depends on unknown module {dep}")
 
+    ros_setup_value = raw.get("ros_setup", path_variables.get("ros_setup", "/opt/ros/humble/setup.bash"))
+    monitor_setup_values = _as_str_list(raw.get("monitor_setups"), "monitor_setups")
+
     return LauncherConfig(
         host=str(raw.get("host", "0.0.0.0")),
         port=int(raw.get("port", 8080)),
+        paths=path_variables,
+        ros_setup=Path(_expand_config_vars(str(ros_setup_value), path_variables)).expanduser(),
+        monitor_setups=[
+            Path(_expand_config_vars(value, path_variables)).expanduser()
+            for value in monitor_setup_values
+        ],
         log_dir=log_dir,
         state_dir=state_dir,
         stop_timeout_sec=float(raw.get("stop_timeout_sec", 8.0)),

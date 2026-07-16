@@ -67,6 +67,7 @@ class ProcessManager:
         labels = {
             "sensor": "传感器驱动",
             "algorithm": "算法模块",
+            "control": "控制接口",
         }
         for module_id, module in self.config.modules.items():
             item = categories.setdefault(

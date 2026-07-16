@@ -21,6 +21,7 @@
     button.restart { background: #7a5cff; }
     button.secondary { background: #31405f; }
     button:disabled { opacity: .45; cursor: not-allowed; }
+    select { min-height: 38px; border: 1px solid #31405f; border-radius: 9px; padding: 8px 10px; color: #e9eefc; background: #0e1730; }
     input[type="checkbox"] { width: 18px; height: 18px; accent-color: #2c63ff; cursor: pointer; }
     .table-wrap { width: 100%; overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; font-size: 14px; }
@@ -33,6 +34,7 @@
     .stopping { background: #75551b; color: #ffe7b1; }
     .sensor { background: #1d5f78; color: #d8f7ff; }
     .algorithm { background: #4b4775; color: #eee8ff; }
+    .control { background: #66501e; color: #ffe9b5; }
     .rate-ok { color: #8dffc5; }
     .rate-bad { color: #ffb1bd; }
     .check-ok { color: #8dffc5; }
@@ -58,6 +60,7 @@
       .category-card .actions .secondary { grid-column: 1 / -1; }
       .toolbar { padding: 8px; gap: 7px; }
       .toolbar button { flex: 1 1 calc(50% - 7px); }
+      .toolbar select { flex: 1 1 100%; width: 100%; }
       #monitorState { flex: 1 0 100%; order: 10; padding: 2px 3px; font-size: 13px; }
       .table-wrap { overflow: visible; padding: 8px; }
       table, tbody, tr, td { display: block; width: 100%; }
@@ -119,6 +122,9 @@
 
     <section class="card">
       <div class="toolbar">
+        <select id="logFilter" onchange="setLogFilter(this.value)" title="日志模块筛选">
+          <option value="all">全部日志</option>
+        </select>
         <button class="secondary" onclick="clearLogs()">清空日志</button>
       </div>
       <div id="logs"></div>
@@ -131,8 +137,10 @@
     let rates = [];
     let monitorStatus = { enabled: false, started: false, error: null };
     let moduleRefreshTimer = null;
+    let logFilter = "all";
+    let logEntries = [];
     const selected = new Set();
-    const categoryLabels = { sensor: "传感器驱动", algorithm: "算法模块" };
+    const categoryLabels = { sensor: "传感器驱动", algorithm: "算法模块", control: "控制接口" };
 
     async function api(path, options = {}) {
       const res = await fetch(path, {
@@ -172,6 +180,7 @@
     async function loadModules() {
       modules = await api("/api/modules");
       categories = await api("/api/categories");
+      renderLogFilterOptions();
       renderCategories();
       renderModules();
     }
@@ -262,6 +271,22 @@
       }
     }
 
+    function renderLogFilterOptions() {
+      const select = document.getElementById("logFilter");
+      const current = select.value || logFilter;
+      const options = [
+        { id: "all", name: "全部日志" },
+        { id: "system", name: "system" },
+        { id: "config", name: "config" },
+        ...modules.map(m => ({ id: m.id, name: `${m.name} (${m.id})` })),
+      ];
+      select.innerHTML = options
+        .map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`)
+        .join("");
+      logFilter = options.some(item => item.id === current) ? current : "all";
+      select.value = logFilter;
+    }
+
     function renderModules() {
       const tbody = document.getElementById("moduleRows");
       tbody.innerHTML = "";
@@ -338,8 +363,29 @@
       await runAction("停止勾选模块", () => api("/api/stop-selected", { method: "POST", body: JSON.stringify({ modules: [...selected] }) }));
     }
 
-    function clearLogs() { document.getElementById("logs").innerHTML = ""; }
+    function clearLogs() {
+      logEntries = [];
+      document.getElementById("logs").innerHTML = "";
+    }
+    function setLogFilter(value) {
+      logFilter = value;
+      renderLogs();
+    }
+    function matchesLogFilter(payload) {
+      return logFilter === "all" || payload.module === logFilter;
+    }
+    function renderLogs() {
+      const logs = document.getElementById("logs");
+      logs.innerHTML = "";
+      logEntries.filter(matchesLogFilter).forEach(appendLogLine);
+      logs.scrollTop = logs.scrollHeight;
+    }
     function appendLog(payload) {
+      logEntries.push(payload);
+      while (logEntries.length > 1000) logEntries.shift();
+      if (matchesLogFilter(payload)) appendLogLine(payload);
+    }
+    function appendLogLine(payload) {
       const logs = document.getElementById("logs");
       const div = document.createElement("div");
       div.className = "log-line";

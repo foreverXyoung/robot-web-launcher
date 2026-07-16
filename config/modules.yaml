@@ -51,32 +51,6 @@ modules:
     startup_delay: 2
     monitor_topics: ["/gps/rtk_odom"]
 
-  fast_lio:
-    name: FAST-LIO
-    category: algorithm
-    domain_id: 10
-    workdir: ${project_root}/mid_ws
-    setup: install/setup.bash
-    cmd: ["ros2", "launch", "fast_lio", "mapping.launch.py", "rviz:=false"]
-    autostart: true
-    restart_on_crash: true
-    depends_on: ["lidar", "imu"]
-    startup_delay: 3
-    health_nodes: ["/laserMapping"]
-    health_topics: ["/Odometry", "/cloud_registered"]
-    monitor_topics: ["/Odometry"]
-
-  robot_controller:
-    name: 底盘控制
-    domain_id: 10
-    workdir: ${project_root}/robot_contor_ws
-    setup: install/setup.bash
-    cmd: ["ros2", "run", "keya_robot_controller", "robot_controller_node"]
-    autostart: false
-    restart_on_crash: true
-    startup_delay: 1
-    health_nodes: ["/robot_controller"]
-
   depth_camera:
     name: RGB-D
     category: sensor
@@ -107,8 +81,24 @@ modules:
     startup_delay: 3
     monitor_topics: ["/camera/color/image_raw"]
 
+  fast_lio:
+    name: FAST-LIO
+    category: algorithm
+    domain_id: 10
+    workdir: ${project_root}/mid_ws
+    setup: install/setup.bash
+    cmd: ["ros2", "launch", "fast_lio", "mapping.launch.py", "rviz:=false"]
+    autostart: true
+    restart_on_crash: true
+    depends_on: ["lidar", "imu"]
+    startup_delay: 3
+    health_nodes: ["/laserMapping"]
+    health_topics: ["/Odometry", "/cloud_registered"]
+    monitor_topics: ["/Odometry"]
+
   domain_bridge:
     name: 域桥 plus
+    category: algorithm
     domain_id: 20
     workdir: ${project_root}/bridge_info_joint_new
     setup: install/setup.bash
@@ -120,6 +110,7 @@ modules:
 
   object_detection:
     name: 目标检测
+    category: algorithm
     domain_id: 20
     workdir: ${project_root}/object_detection/26_4_9
     cmd: ["${object_detection_python}"]
@@ -131,6 +122,7 @@ modules:
 
   auto_explore:
     name: 导航模块
+    category: algorithm
     domain_id: 10
     workdir: ${project_root}/Auto_Explor_ws
     setup: install/setup.bash
@@ -143,6 +135,7 @@ modules:
 
   waypoint:
     name: Waypoint
+    category: algorithm
     domain_id: 10
     workdir: ${project_root}/Auto_Explor_ws
     setup: install/setup.bash
@@ -150,3 +143,15 @@ modules:
     autostart: false
     restart_on_crash: false
     depends_on: ["auto_explore"]
+
+  robot_controller:
+    name: 底盘控制
+    category: control
+    domain_id: 10
+    workdir: ${project_root}/robot_contor_ws
+    setup: install/setup.bash
+    cmd: ["ros2", "run", "keya_robot_controller", "robot_controller_node"]
+    autostart: false
+    restart_on_crash: true
+    startup_delay: 1
+    health_nodes: ["/robot_controller"]

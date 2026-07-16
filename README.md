@@ -75,6 +75,36 @@ ROBOT_LAUNCHER_EXTRA_SETUPS=/data/xxx_ws/install/setup.bash ./scripts/run_dev.sh
 http://AGX_IP:8080
 ```
 
+## 桌面双击启动
+
+不使用开机自启动时，可以为当前 Ubuntu 用户安装“启动”和“停止”两个快捷方式，无需 `sudo`：
+
+```bash
+cd /data/sinuo_project/robot_web_launcher
+./scripts/install_desktop_shortcuts.sh
+```
+
+安装后可以从 Ubuntu 应用菜单搜索：
+
+- `摘钩机器人控制台`：后台未运行时启动服务，等待接口就绪后打开浏览器；已经运行时只打开浏览器，不会重复启动。
+- `停止摘钩机器人控制台`：先发送正常退出信号，等待后台停止所管理的 ROS 模块，超时后才强制结束。
+
+系统支持桌面图标时，也会把图标复制到当前用户的桌面目录。首次双击若被 Ubuntu 拦截，右键图标选择“允许启动”。
+
+桌面启动日志位于：
+
+```text
+runtime/logs/web_launcher.log
+```
+
+卸载快捷方式：
+
+```bash
+./scripts/install_desktop_shortcuts.sh --remove
+```
+
+桌面启动和 systemd 服务不要同时使用。如果以后启用 systemd，应先用“停止摘钩机器人控制台”结束桌面启动的后台，再安装并启动 systemd 服务。
+
 ## 生产运行
 
 使用安装脚本生成并安装 systemd 服务。脚本默认采用当前登录用户，也可以通过 `SERVICE_USER` 指定：

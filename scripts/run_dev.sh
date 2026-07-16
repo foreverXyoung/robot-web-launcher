@@ -37,10 +37,13 @@ fi
 HOST="${ROBOT_LAUNCHER_HOST:-${server_config[0]}}"
 PORT="${ROBOT_LAUNCHER_PORT:-${server_config[1]}}"
 RELOAD="${ROBOT_LAUNCHER_RELOAD:-0}"
+PID_FILE="${ROBOT_LAUNCHER_PID_FILE:-$(pwd)/runtime/web_launcher.pid}"
 
 args=(app.main:app --host "${HOST}" --port "${PORT}" --no-access-log)
 if [[ "${RELOAD}" == "1" ]]; then
   args+=(--reload)
 fi
 
+mkdir -p "$(dirname "${PID_FILE}")"
+printf '%s\n' "$$" > "${PID_FILE}"
 exec "${PYTHON_BIN}" -m uvicorn "${args[@]}"

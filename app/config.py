@@ -31,6 +31,23 @@ class ModuleConfig:
 
 
 @dataclass(frozen=True)
+class RecorderModeConfig:
+    id: str
+    name: str
+    topics: list[str]
+
+
+@dataclass(frozen=True)
+class RecorderConfig:
+    enabled: bool
+    output_dir: Path
+    default_domain_id: int
+    min_free_gb: float
+    stop_timeout_sec: float
+    modes: dict[str, RecorderModeConfig]
+
+
+@dataclass(frozen=True)
 class LauncherConfig:
     host: str
     port: int
@@ -40,6 +57,7 @@ class LauncherConfig:
     log_dir: Path
     state_dir: Path
     stop_timeout_sec: float
+    recorder: RecorderConfig
     modules: dict[str, ModuleConfig]
 
 
@@ -81,6 +99,38 @@ def _load_path_variables(raw: Any) -> dict[str, str]:
     if unresolved:
         raise ValueError(f"cyclic path variables: {', '.join(sorted(unresolved))}")
     return variables
+
+
+def _load_recorder_config(raw: dict, base_dir: Path, path_variables: dict[str, str]) -> RecorderConfig:
+    item = raw.get("recorder") or {}
+    if not isinstance(item, dict):
+        raise ValueError("recorder must be a mapping")
+
+    output_dir = Path(
+        _expand_config_vars(str(item.get("output_dir", base_dir / "runtime" / "bags")), path_variables)
+    ).expanduser()
+    if not output_dir.is_absolute():
+        output_dir = base_dir / output_dir
+
+    modes: dict[str, RecorderModeConfig] = {}
+    for mode_id, mode_item in (item.get("modes") or {}).items():
+        if not isinstance(mode_item, dict):
+            raise ValueError(f"recorder.modes.{mode_id} must be a mapping")
+        topics = _as_str_list(mode_item.get("topics"), f"recorder.modes.{mode_id}.topics")
+        modes[str(mode_id)] = RecorderModeConfig(
+            id=str(mode_id),
+            name=str(mode_item.get("name", mode_id)),
+            topics=topics,
+        )
+
+    return RecorderConfig(
+        enabled=bool(item.get("enabled", True)),
+        output_dir=output_dir,
+        default_domain_id=int(item.get("default_domain_id", 20)),
+        min_free_gb=float(item.get("min_free_gb", 10.0)),
+        stop_timeout_sec=float(item.get("stop_timeout_sec", 12.0)),
+        modes=modes,
+    )
 
 
 def load_config(path: str | Path) -> LauncherConfig:
@@ -166,5 +216,6 @@ def load_config(path: str | Path) -> LauncherConfig:
         log_dir=log_dir,
         state_dir=state_dir,
         stop_timeout_sec=float(raw.get("stop_timeout_sec", 8.0)),
+        recorder=_load_recorder_config(raw, base_dir, path_variables),
         modules=modules,
     )

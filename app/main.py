@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from .config import load_config
 from .manager import ProcessManager
+from .recorder import RecorderManager
 
 
 BASE_DIR = Path(__file__).resolve().parents[1]
@@ -17,6 +18,7 @@ CONFIG_PATH = Path(os.environ.get("ROBOT_LAUNCHER_CONFIG", BASE_DIR / "config" /
 
 config = load_config(CONFIG_PATH)
 manager = ProcessManager(config)
+recorder = RecorderManager(config, lambda event, message: manager.publish_event("recorder", event, message))
 app = FastAPI(title="Robot Web Launcher")
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 
@@ -29,6 +31,12 @@ class MonitorToggle(BaseModel):
     enabled: bool
 
 
+class RecorderStart(BaseModel):
+    mode: str
+    domain_id: int | None = None
+    name: str | None = None
+
+
 @app.on_event("startup")
 async def on_startup() -> None:
     manager.set_monitor_enabled(False)
@@ -38,6 +46,7 @@ async def on_startup() -> None:
 
 @app.on_event("shutdown")
 async def on_shutdown() -> None:
+    await recorder.shutdown()
     await manager.shutdown()
 
 
@@ -77,6 +86,27 @@ async def monitor_status() -> dict:
 @app.post("/api/monitor")
 async def set_monitor(toggle: MonitorToggle) -> dict:
     return manager.set_monitor_enabled(toggle.enabled)
+
+
+@app.get("/api/recorder")
+async def recorder_status() -> dict:
+    return recorder.status()
+
+
+@app.post("/api/recorder/start")
+async def start_recorder(request: RecorderStart) -> dict:
+    try:
+        return await recorder.start(request.mode, request.domain_id, request.name)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/recorder/stop")
+async def stop_recorder() -> dict:
+    try:
+        return await recorder.stop()
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/api/modules/{module_id}/start")

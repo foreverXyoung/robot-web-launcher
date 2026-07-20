@@ -22,7 +22,9 @@
     button.secondary { background: #31405f; }
     button:disabled { opacity: .45; cursor: not-allowed; }
     select { min-height: 38px; border: 1px solid #31405f; border-radius: 9px; padding: 8px 10px; color: #e9eefc; background: #0e1730; }
+    input[type="text"], input[type="number"] { min-height: 38px; border: 1px solid #31405f; border-radius: 9px; padding: 8px 10px; color: #e9eefc; background: #0e1730; }
     input[type="checkbox"] { width: 18px; height: 18px; accent-color: #2c63ff; cursor: pointer; }
+    input[type="radio"] { width: 17px; height: 17px; accent-color: #2c63ff; cursor: pointer; }
     .table-wrap { width: 100%; overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; font-size: 14px; }
     th, td { padding: 10px; border-bottom: 1px solid #24304f; text-align: left; vertical-align: middle; }
@@ -40,6 +42,13 @@
     .check-ok { color: #8dffc5; }
     .check-bad { color: #ffb1bd; }
     .actions, .action-buttons { display: flex; gap: 6px; flex-wrap: wrap; }
+    .recorder-panel { padding: 12px; display: grid; gap: 10px; border-bottom: 1px solid #273254; background: #101832; }
+    .recorder-title { font-weight: 700; }
+    .recorder-grid { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(120px, .4fr) minmax(190px, .7fr) auto auto; gap: 8px; align-items: end; }
+    .radio-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+    .radio-row label, .field label { color: #aab8df; font-size: 13px; }
+    .field { display: grid; gap: 4px; }
+    .recorder-status { display: flex; gap: 12px; flex-wrap: wrap; color: #9aa8ce; font-size: 13px; overflow-wrap: anywhere; }
     #logs { height: calc(100vh - 165px); overflow: auto; padding: 12px; background: #060912; font-family: ui-monospace, Consolas, monospace; font-size: 13px; white-space: pre-wrap; }
     .log-line { margin: 0 0 4px; }
     .muted { color: #9aa8ce; }
@@ -58,6 +67,9 @@
       .category-card { min-width: 0; padding: 10px; }
       .category-card .actions { display: grid; grid-template-columns: 1fr 1fr; }
       .category-card .actions .secondary { grid-column: 1 / -1; }
+      .recorder-panel { padding: 8px; }
+      .recorder-grid { grid-template-columns: 1fr; }
+      .recorder-grid button { width: 100%; }
       .toolbar { padding: 8px; gap: 7px; }
       .toolbar button { flex: 1 1 calc(50% - 7px); }
       .toolbar select { flex: 1 1 100%; width: 100%; }
@@ -88,6 +100,26 @@
   <main>
     <section class="card">
       <div class="category-bar" id="categoryBar"></div>
+      <div class="recorder-panel">
+        <div class="recorder-title">数据录制</div>
+        <div class="recorder-grid">
+          <div class="field">
+            <label>录制模式</label>
+            <div class="radio-row" id="recorderModes"></div>
+          </div>
+          <div class="field">
+            <label for="recorderDomain">Domain</label>
+            <input id="recorderDomain" type="number" min="0" max="232" step="1" />
+          </div>
+          <div class="field">
+            <label for="recorderName">文件名前缀</label>
+            <input id="recorderName" type="text" placeholder="record" />
+          </div>
+          <button id="recorderStart" onclick="startRecorder()">开始录制</button>
+          <button id="recorderStop" class="stop" onclick="stopRecorder()">停止录制</button>
+        </div>
+        <div class="recorder-status" id="recorderState">录制状态读取中...</div>
+      </div>
       <div class="toolbar">
         <button onclick="startSelected()">启动勾选</button>
         <button class="stop" onclick="stopSelected()">关闭勾选</button>
@@ -136,6 +168,7 @@
     let categories = [];
     let rates = [];
     let monitorStatus = { enabled: false, started: false, error: null };
+    let recorderStatus = { enabled: false, status: "stopped", modes: [] };
     let moduleRefreshTimer = null;
     let logFilter = "all";
     let logEntries = [];
@@ -175,6 +208,7 @@
       await loadModules();
       await loadMonitorStatus();
       await loadSensorRates();
+      await loadRecorderStatus();
     }
 
     async function loadModules() {
@@ -202,6 +236,11 @@
     async function loadMonitorStatus() {
       monitorStatus = await api("/api/monitor");
       renderMonitorStatus();
+    }
+
+    async function loadRecorderStatus() {
+      recorderStatus = await api("/api/recorder");
+      renderRecorder();
     }
 
     async function loadConfigCheck(showDetails = false) {
@@ -271,6 +310,45 @@
       }
     }
 
+    function renderRecorder() {
+      const modes = document.getElementById("recorderModes");
+      const domainInput = document.getElementById("recorderDomain");
+      const nameInput = document.getElementById("recorderName");
+      const startButton = document.getElementById("recorderStart");
+      const stopButton = document.getElementById("recorderStop");
+      const state = document.getElementById("recorderState");
+      const running = ["starting", "running", "stopping"].includes(recorderStatus.status);
+
+      if (!domainInput.value) domainInput.value = recorderStatus.default_domain_id ?? 20;
+      if (!nameInput.value) nameInput.value = `record_${new Date().toISOString().slice(0, 10).replaceAll("-", "")}`;
+
+      const currentMode = document.querySelector("input[name='recorderMode']:checked")?.value
+        || recorderStatus.mode
+        || recorderStatus.modes?.[0]?.id
+        || "sensors";
+      modes.innerHTML = (recorderStatus.modes || []).map(mode => `
+        <label title="${escapeHtml((mode.topics || []).join(', '))}">
+          <input type="radio" name="recorderMode" value="${escapeHtml(mode.id)}" ${mode.id === currentMode ? "checked" : ""} ${running ? "disabled" : ""} />
+          ${escapeHtml(mode.name)}
+        </label>
+      `).join("");
+
+      startButton.disabled = !recorderStatus.enabled || running;
+      stopButton.disabled = !running;
+      domainInput.disabled = running;
+      nameInput.disabled = running;
+
+      const parts = [
+        `状态：${recorderStatus.status || "unknown"}`,
+        `剩余空间：${Number(recorderStatus.free_gb || 0).toFixed(1)} GB`,
+        `最低要求：${Number(recorderStatus.min_free_gb || 0).toFixed(1)} GB`,
+      ];
+      if (recorderStatus.pid) parts.push(`PID：${recorderStatus.pid}`);
+      if (recorderStatus.output_path) parts.push(`保存：${recorderStatus.output_path}`);
+      if (recorderStatus.started_at) parts.push(`开始：${recorderStatus.started_at}`);
+      state.textContent = parts.join(" ｜ ");
+    }
+
     function renderLogFilterOptions() {
       const select = document.getElementById("logFilter");
       const current = select.value || logFilter;
@@ -278,6 +356,7 @@
         { id: "all", name: "全部日志" },
         { id: "system", name: "system" },
         { id: "config", name: "config" },
+        { id: "recorder", name: "数据录制" },
         ...modules.map(m => ({ id: m.id, name: `${m.name} (${m.id})` })),
       ];
       select.innerHTML = options
@@ -363,6 +442,26 @@
       await runAction("停止勾选模块", () => api("/api/stop-selected", { method: "POST", body: JSON.stringify({ modules: [...selected] }) }));
     }
 
+    async function startRecorder() {
+      const mode = document.querySelector("input[name='recorderMode']:checked")?.value || "sensors";
+      const domainId = Number(document.getElementById("recorderDomain").value || recorderStatus.default_domain_id || 20);
+      const name = document.getElementById("recorderName").value || mode;
+      await runAction("开始录制", async () => {
+        recorderStatus = await api("/api/recorder/start", {
+          method: "POST",
+          body: JSON.stringify({ mode, domain_id: domainId, name }),
+        });
+        renderRecorder();
+      });
+    }
+
+    async function stopRecorder() {
+      await runAction("停止录制", async () => {
+        recorderStatus = await api("/api/recorder/stop", { method: "POST" });
+        renderRecorder();
+      });
+    }
+
     function clearLogs() {
       logEntries = [];
       document.getElementById("logs").innerHTML = "";
@@ -404,6 +503,7 @@
       ws.onmessage = (ev) => {
         const payload = JSON.parse(ev.data);
         appendLog(payload);
+        if (payload.module === "recorder" && payload.event !== "log") loadRecorderStatus();
         if (payload.event !== "log") scheduleModuleRefresh();
       };
       ws.onclose = () => {
@@ -428,6 +528,7 @@
     loadConfigCheck(false);
     connectWs();
     setInterval(loadSensorRates, 1000);
+    setInterval(loadRecorderStatus, 2000);
   </script>
 </body>
 </html>

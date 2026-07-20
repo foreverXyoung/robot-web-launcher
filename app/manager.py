@@ -94,6 +94,9 @@ class ProcessManager:
         add("launcher", "ros_setup", self.config.ros_setup, self.config.ros_setup.is_file())
         for index, setup in enumerate(self.config.monitor_setups):
             add("launcher", f"monitor_setups[{index}]", setup, setup.is_file(), "warning")
+        recorder_output = self.config.recorder.output_dir
+        add("recorder", "output_dir_parent", recorder_output.parent, recorder_output.parent.is_dir())
+        add("recorder", "ros2", shutil.which("ros2") or "ros2", shutil.which("ros2") is not None)
 
         for module_id, module in self.config.modules.items():
             add(module_id, "workdir", module.workdir, module.workdir.is_dir())
@@ -317,6 +320,9 @@ class ProcessManager:
     def set_monitor_enabled(self, enabled: bool) -> dict:
         self.monitor.set_enabled(enabled)
         return self.monitor.status()
+
+    async def publish_event(self, module_id: str, event: str, message: str) -> None:
+        await self._broadcast(module_id, event, message)
 
     async def _pipe_output(
         self,
@@ -543,7 +549,7 @@ class ProcessManager:
             "module": module_id,
             "event": event,
             "message": message,
-            "state": asdict(self.states[module_id]),
+            "state": asdict(self.states[module_id]) if module_id in self.states else None,
         }
         for queue in list(self.log_queues):
             try:

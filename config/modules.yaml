@@ -9,6 +9,32 @@ monitor_setups:
 log_dir: runtime/logs
 state_dir: runtime/state
 stop_timeout_sec: 8
+recorder:
+  enabled: true
+  output_dir: ${project_root}/bags
+  default_domain_id: 20
+  min_free_gb: 10
+  stop_timeout_sec: 12
+  modes:
+    sensors:
+      name: 录制传感器数据
+      topics:
+        - /livox/lidar
+        - /livox/imu
+        - /IMU_data
+        - /gps/rtk_odom
+        - /camera/color/image_raw
+    all:
+      name: 录制所有数据
+      topics:
+        - /livox/lidar
+        - /livox/imu
+        - /IMU_data
+        - /gps/rtk_odom
+        - /camera/color/image_raw
+        - /Odometry
+        - /cloud_registered
+        - /cmd_vel
 
 modules:
   lidar:

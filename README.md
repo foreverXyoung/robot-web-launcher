@@ -217,13 +217,13 @@ cluster:
     chassis:
       name: 底盘从机
       kind: remote
-      base_url: http://192.168.1.112:8080
+      base_url: http://192.168.1.166:8080
 ```
 
 推荐启动顺序：
 
 ```bash
-# 底盘从机，192.168.1.112
+# 底盘从机，192.168.1.166
 cd /data/sinuo_project/robot_web_launcher
 ./scripts/run_dev.sh
 
@@ -235,7 +235,7 @@ ROBOT_LAUNCHER_CONFIG=$PWD/config/modules_arm.yaml ./scripts/run_dev.sh
 机械臂主机启动前先确认能访问底盘从机：
 
 ```bash
-curl http://192.168.1.112:8080/api/modules
+curl http://192.168.1.166:8080/api/modules
 ```
 
 集群模式下，统一页面中的模块 ID 会带主机前缀，例如：

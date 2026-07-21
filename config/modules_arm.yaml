@@ -22,7 +22,7 @@ cluster:
     chassis:
       name: 底盘从机
       kind: remote
-      base_url: http://192.168.1.112:8080
+      base_url: http://192.168.1.166:8080
 monitor_setups:
   - ${arm_ws}/install/setup.bash
   - ${force_ws}/install/setup.bash

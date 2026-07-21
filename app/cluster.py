@@ -244,7 +244,8 @@ class ClusterManager:
         if host_id == self.self_host_id:
             await self.local.start_many([raw_id])
             return self.local.get_state(raw_id)
-        return await self.remote_clients[host_id].post(f"/api/modules/{raw_id}/start")
+        state = await self.remote_clients[host_id].post(f"/api/modules/{raw_id}/start")
+        return self._prefix_module(host_id, self._host_name(host_id), state)
 
     async def stop_module(self, module_id: str) -> dict:
         if not self.cluster_active():
@@ -252,7 +253,8 @@ class ClusterManager:
         host_id, raw_id = self._split_module_id(module_id)
         if host_id == self.self_host_id:
             return await self.local.stop(raw_id)
-        return await self.remote_clients[host_id].post(f"/api/modules/{raw_id}/stop")
+        state = await self.remote_clients[host_id].post(f"/api/modules/{raw_id}/stop")
+        return self._prefix_module(host_id, self._host_name(host_id), state)
 
     async def restart_module(self, module_id: str) -> dict:
         if not self.cluster_active():
@@ -264,7 +266,8 @@ class ClusterManager:
             await self.local.stop(raw_id)
             await self.local.start_many([raw_id])
             return self.local.get_state(raw_id)
-        return await self.remote_clients[host_id].post(f"/api/modules/{raw_id}/restart")
+        state = await self.remote_clients[host_id].post(f"/api/modules/{raw_id}/restart")
+        return self._prefix_module(host_id, self._host_name(host_id), state)
 
     async def start_category(self, category_key: str) -> None:
         if not self.cluster_active():

@@ -212,6 +212,78 @@ class ClusterManager:
                 remote[host_id] = {"enabled": False, "started": False, "error": f"{type(exc).__name__}: {exc}"}
         return {**status, "cluster": True, "remote": remote}
 
+    async def cluster_status(self) -> dict:
+        if not self.cluster_active():
+            return {
+                "enabled": False,
+                "self": self.self_host_id,
+                "hosts": [
+                    {
+                        "id": self.self_host_id,
+                        "name": self.local_host.name if self.local_host else "本机",
+                        "kind": "local",
+                        "online": True,
+                        "base_url": None,
+                        "error": None,
+                    }
+                ],
+            }
+
+        hosts = []
+        for host_id, host in self.hosts.items():
+            if host_id == self.self_host_id or host.kind == "local":
+                hosts.append(
+                    {
+                        "id": host_id,
+                        "name": host.name,
+                        "kind": "local",
+                        "online": True,
+                        "base_url": host.base_url,
+                        "error": None,
+                    }
+                )
+                continue
+
+            client = self.remote_clients.get(host_id)
+            if client is None:
+                hosts.append(
+                    {
+                        "id": host_id,
+                        "name": host.name,
+                        "kind": host.kind,
+                        "online": False,
+                        "base_url": host.base_url,
+                        "error": "missing remote client",
+                    }
+                )
+                continue
+
+            try:
+                await client.get("/api/monitor")
+                hosts.append(
+                    {
+                        "id": host_id,
+                        "name": host.name,
+                        "kind": host.kind,
+                        "online": True,
+                        "base_url": client.base_url,
+                        "error": None,
+                    }
+                )
+            except Exception as exc:
+                hosts.append(
+                    {
+                        "id": host_id,
+                        "name": host.name,
+                        "kind": host.kind,
+                        "online": False,
+                        "base_url": client.base_url,
+                        "error": f"{type(exc).__name__}: {exc}",
+                    }
+                )
+
+        return {"enabled": True, "self": self.self_host_id, "hosts": hosts}
+
     async def set_monitor_enabled(self, enabled: bool) -> dict:
         self.local.set_monitor_enabled(enabled)
         if self.cluster_active():

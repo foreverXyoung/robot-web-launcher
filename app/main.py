@@ -87,6 +87,11 @@ async def monitor_status() -> dict:
     return await cluster.monitor_status()
 
 
+@app.get("/api/cluster")
+async def cluster_status() -> dict:
+    return await cluster.cluster_status()
+
+
 @app.post("/api/monitor")
 async def set_monitor(toggle: MonitorToggle) -> dict:
     return await cluster.set_monitor_enabled(toggle.enabled)

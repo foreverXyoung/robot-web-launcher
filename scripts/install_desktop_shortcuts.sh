@@ -29,7 +29,7 @@ cat > "${tmp_dir}/${START_FILE}" <<EOF
 Version=1.0
 Type=Application
 Name=Robot Web Launcher
-Name[zh_CN]=摘钩机器人控制台
+Name[zh_CN]=拉风机器人控制台
 Comment=Start or open the robot module control console
 Comment[zh_CN]=启动或打开机器人模块控制台
 Exec=/usr/bin/env bash "${PROJECT_DIR}/scripts/start_desktop.sh"
@@ -45,7 +45,7 @@ cat > "${tmp_dir}/${STOP_FILE}" <<EOF
 Version=1.0
 Type=Application
 Name=Stop Robot Web Launcher
-Name[zh_CN]=停止摘钩机器人控制台
+Name[zh_CN]=停止拉风机器人控制台
 Comment=Gracefully stop the launcher and its managed modules
 Comment[zh_CN]=安全停止控制台及其管理的模块
 Exec=/usr/bin/env bash "${PROJECT_DIR}/scripts/stop_desktop.sh"
@@ -73,7 +73,7 @@ if command -v update-desktop-database >/dev/null 2>&1; then
 fi
 
 echo "Desktop shortcuts installed."
-echo "Application menu: 摘钩机器人控制台 / 停止摘钩机器人控制台"
+echo "Application menu: 拉风机器人控制台 / 停止拉风机器人控制台"
 if [[ -n "${DESKTOP_DIR}" && -d "${DESKTOP_DIR}" ]]; then
   echo "Desktop directory: ${DESKTOP_DIR}"
 fi

@@ -36,7 +36,7 @@ fi
 
 notify() {
   if command -v notify-send >/dev/null 2>&1; then
-    notify-send "摘钩机器人控制台" "$1" >/dev/null 2>&1 || true
+    notify-send "拉风机器人控制台" "$1" >/dev/null 2>&1 || true
   fi
 }
 

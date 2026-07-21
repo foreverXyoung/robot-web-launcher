@@ -67,6 +67,7 @@ modules:
     restart_on_crash: true
     depends_on: ["arm_robot", "arm_depth_camera"]
     startup_delay: 2
+    monitor_topics: ["/raw_pose", "/fine_pose"]
 
   force_sensor:
     name: 力传感器
@@ -90,6 +91,7 @@ modules:
     restart_on_crash: true
     depends_on: ["force_sensor"]
     startup_delay: 1
+    monitor_topics: ["/force_state"]
 
   arm_depth_camera:
     name: 机械臂 RGB-D
@@ -125,6 +127,7 @@ modules:
     restart_on_crash: true
     depends_on: ["arm_depth_camera", "pointcloud_processor"]
     startup_delay: 2
+    monitor_topics: ["/raw_pose", "/fine_pose"]
 
   arm_domain_bridge:
     name: 机械臂域桥
@@ -136,3 +139,4 @@ modules:
     autostart: false
     restart_on_crash: true
     startup_delay: 1
+    monitor_topics: ["/arm_state", "/robot_state", "/force_state", "/raw_pose", "/fine_pose"]

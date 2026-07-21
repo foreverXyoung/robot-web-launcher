@@ -15,6 +15,7 @@ CATEGORY_LABELS = {
     "algorithm": "算法模块",
     "control": "控制接口",
 }
+CATEGORY_ORDER = {"sensor": 0, "algorithm": 1, "control": 2}
 
 
 class RemoteAgentClient:
@@ -141,7 +142,14 @@ class ClusterManager:
                 },
             )
             item["modules"].append(module["id"])
-        return list(categories.values())
+        host_order = {host_id: index for index, host_id in enumerate(self.hosts)}
+        return sorted(
+            categories.values(),
+            key=lambda item: (
+                host_order.get(item["id"].split(":", 1)[0], 99),
+                CATEGORY_ORDER.get(item["id"].split(":", 1)[1], 99),
+            ),
+        )
 
     async def validate_config(self) -> dict:
         if not self.cluster_active():

@@ -198,7 +198,6 @@ http://机械臂主机IP:8081
 - `力传感器监控`
 - `机械臂 RGB-D`
 - `ICP 算法`
-- `机械臂域桥`
 
 机械臂、相机、力传感器、ICP 等模块默认都保持 `autostart: false`，由现场人员确认后手动启动。示例配置默认使用 `ROS_DOMAIN_ID=20`；如果手工终端流程仍在其它 Domain 运行，需要同步修改 `modules_arm.yaml` 中各模块的 `domain_id`。
 

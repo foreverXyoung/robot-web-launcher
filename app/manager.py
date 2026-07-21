@@ -15,6 +15,7 @@ from .ros_monitor import RosTopicMonitor
 
 
 RUNNING_STATES = {"starting", "running", "stopping"}
+CATEGORY_ORDER = {"sensor": 0, "algorithm": 1, "control": 2}
 
 
 @dataclass
@@ -75,7 +76,7 @@ class ProcessManager:
                 {"id": module.category, "name": labels.get(module.category, module.category), "modules": []},
             )
             item["modules"].append(module_id)
-        return list(categories.values())
+        return sorted(categories.values(), key=lambda item: CATEGORY_ORDER.get(item["id"], 99))
 
     def validate_config(self) -> dict:
         checks: list[dict] = []

@@ -48,6 +48,21 @@ class RecorderConfig:
 
 
 @dataclass(frozen=True)
+class ClusterHostConfig:
+    id: str
+    name: str
+    kind: str
+    base_url: str | None = None
+
+
+@dataclass(frozen=True)
+class ClusterConfig:
+    enabled: bool
+    self_host: str
+    hosts: dict[str, ClusterHostConfig]
+
+
+@dataclass(frozen=True)
 class LauncherConfig:
     host: str
     port: int
@@ -58,6 +73,7 @@ class LauncherConfig:
     state_dir: Path
     stop_timeout_sec: float
     recorder: RecorderConfig
+    cluster: ClusterConfig
     modules: dict[str, ModuleConfig]
 
 
@@ -130,6 +146,33 @@ def _load_recorder_config(raw: dict, base_dir: Path, path_variables: dict[str, s
         min_free_gb=float(item.get("min_free_gb", 10.0)),
         stop_timeout_sec=float(item.get("stop_timeout_sec", 12.0)),
         modes=modes,
+    )
+
+
+def _load_cluster_config(raw: dict) -> ClusterConfig:
+    item = raw.get("cluster") or {}
+    if not isinstance(item, dict):
+        raise ValueError("cluster must be a mapping")
+
+    hosts: dict[str, ClusterHostConfig] = {}
+    for host_id, host_item in (item.get("hosts") or {}).items():
+        if not isinstance(host_item, dict):
+            raise ValueError(f"cluster.hosts.{host_id} must be a mapping")
+        hosts[str(host_id)] = ClusterHostConfig(
+            id=str(host_id),
+            name=str(host_item.get("name", host_id)),
+            kind=str(host_item.get("kind", "remote")),
+            base_url=str(host_item["base_url"]).rstrip("/") if host_item.get("base_url") else None,
+        )
+
+    self_host = str(item.get("self", "local"))
+    if hosts and self_host not in hosts:
+        raise ValueError(f"cluster.self references unknown host: {self_host}")
+
+    return ClusterConfig(
+        enabled=bool(item.get("enabled", False)),
+        self_host=self_host,
+        hosts=hosts,
     )
 
 
@@ -217,5 +260,6 @@ def load_config(path: str | Path) -> LauncherConfig:
         state_dir=state_dir,
         stop_timeout_sec=float(raw.get("stop_timeout_sec", 8.0)),
         recorder=_load_recorder_config(raw, base_dir, path_variables),
+        cluster=_load_cluster_config(raw),
         modules=modules,
     )

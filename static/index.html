@@ -137,6 +137,7 @@
         <thead>
           <tr>
             <th><input type="checkbox" onchange="toggleAll(this.checked)" /></th>
+            <th>主机</th>
             <th>模块</th>
             <th>分类</th>
             <th>Domain</th>
@@ -357,7 +358,8 @@
         { id: "system", name: "system" },
         { id: "config", name: "config" },
         { id: "recorder", name: "数据录制" },
-        ...modules.map(m => ({ id: m.id, name: `${m.name} (${m.id})` })),
+        ...uniqueHosts().map(h => ({ id: `${h.id}:system`, name: `${h.name} / system` })),
+        ...modules.map(m => ({ id: m.id, name: `${m.host_name ? `${m.host_name} / ` : ""}${m.name} (${m.id})` })),
       ];
       select.innerHTML = options
         .map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`)
@@ -371,8 +373,10 @@
       tbody.innerHTML = "";
       for (const m of modules) {
         const tr = document.createElement("tr");
+        const disabled = m.offline ? "disabled" : "";
         tr.innerHTML = `
-          <td data-label="选择"><input type="checkbox" ${selected.has(m.id) ? "checked" : ""} onchange="setSelected('${m.id}', this.checked)" /></td>
+          <td data-label="选择"><input type="checkbox" ${disabled} ${selected.has(m.id) ? "checked" : ""} onchange="setSelected('${m.id}', this.checked)" /></td>
+          <td data-label="主机">${escapeHtml(m.host_name || "-")}</td>
           <td data-label="模块"><div>${escapeHtml(m.name)}</div><div class="muted">${m.id}</div></td>
           <td data-label="分类"><span class="pill ${m.category}">${categoryLabels[m.category] || m.category}</span></td>
           <td data-label="Domain">${m.domain_id ?? "-"}</td>
@@ -382,13 +386,21 @@
           <td data-label="依赖" class="muted">${(m.depends_on || []).join(", ") || "-"}</td>
           <td data-label="操作" class="module-actions">
             <div class="action-buttons">
-              <button onclick="startOne('${m.id}')">启动</button>
-              <button class="stop" onclick="stopOne('${m.id}')">停止</button>
-              <button class="restart" onclick="restartOne('${m.id}')">重启</button>
+              <button ${disabled} onclick="startOne('${m.id}')">启动</button>
+              <button ${disabled} class="stop" onclick="stopOne('${m.id}')">停止</button>
+              <button ${disabled} class="restart" onclick="restartOne('${m.id}')">重启</button>
             </div>
           </td>`;
         tbody.appendChild(tr);
       }
+    }
+
+    function uniqueHosts() {
+      const byId = new Map();
+      modules.forEach(m => {
+        if (m.host_id) byId.set(m.host_id, { id: m.host_id, name: m.host_name || m.host_id });
+      });
+      return [...byId.values()];
     }
 
     function formatRates(moduleId) {
@@ -414,19 +426,24 @@
     }
     function toggleAll(checked) {
       selected.clear();
-      if (checked) modules.forEach(m => selected.add(m.id));
+      if (checked) modules.filter(m => !m.offline).forEach(m => selected.add(m.id));
       renderModules();
     }
     function selectAll() { toggleAll(true); }
     function clearSelection() { selected.clear(); renderModules(); }
     function selectAutostart() {
       selected.clear();
-      modules.filter(m => m.autostart).forEach(m => selected.add(m.id));
+      modules.filter(m => m.autostart && !m.offline).forEach(m => selected.add(m.id));
       renderModules();
     }
     function selectCategory(category) {
       selected.clear();
-      modules.filter(m => m.category === category).forEach(m => selected.add(m.id));
+      const item = categories.find(c => c.id === category);
+      if (item) {
+        item.modules.forEach(id => selected.add(id));
+      } else {
+        modules.filter(m => (m.category_key || m.category) === category).forEach(m => selected.add(m.id));
+      }
       renderModules();
     }
 
@@ -471,7 +488,7 @@
       renderLogs();
     }
     function matchesLogFilter(payload) {
-      return logFilter === "all" || payload.module === logFilter;
+      return logFilter === "all" || payload.module === logFilter || (!payload.module.includes(":") && payload.module === logFilter);
     }
     function renderLogs() {
       const logs = document.getElementById("logs");

@@ -1,7 +1,7 @@
 host: 0.0.0.0
 port: 8081
 paths:
-  home: /home/nvidia1
+  home: /home/nvidia
   yzf_root: ${home}/yzf
   rq_root: ${home}/rq
   ros_setup: /opt/ros/humble/setup.bash
@@ -11,7 +11,18 @@ paths:
   arm_camera_ws: ${rq_root}/orbbec_336l
   icp_root: ${rq_root}/object
   arm_bridge_ws: ${rq_root}/bridge_info_joint
-  icp_python: ${home}/miniforge3/envs/zhaigou/bin/python
+  icp_python: ${home}/miniconda3/envs/zhaigou/bin/python
+cluster:
+  enabled: true
+  self: arm
+  hosts:
+    arm:
+      name: 机械臂主机
+      kind: local
+    chassis:
+      name: 底盘从机
+      kind: remote
+      base_url: http://192.168.1.112:8080
 monitor_setups:
   - ${arm_ws}/install/setup.bash
   - ${force_ws}/install/setup.bash

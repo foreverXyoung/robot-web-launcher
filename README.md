@@ -184,10 +184,10 @@ cd /data/sinuo_project/robot_web_launcher
 ROBOT_LAUNCHER_CONFIG=/data/sinuo_project/robot_web_launcher/config/modules_arm.yaml ./scripts/run_dev.sh
 ```
 
-`config/modules_arm.yaml` 默认监听 `8081` 端口，适合在第二台 Orin 上作为本地 Agent 运行：
+`config/modules_arm.yaml` 默认监听 `8081` 端口，适合在机械臂 Orin 上作为主机控制台运行：
 
 ```text
-http://从机IP:8081
+http://机械臂主机IP:8081
 ```
 
 这份配置把机械臂流程拆成：
@@ -201,6 +201,52 @@ http://从机IP:8081
 - `机械臂域桥`
 
 机械臂、相机、力传感器、ICP 等模块默认都保持 `autostart: false`，由现场人员确认后手动启动。示例配置默认使用 `ROS_DOMAIN_ID=20`；如果手工终端流程仍在其它 Domain 运行，需要同步修改 `modules_arm.yaml` 中各模块的 `domain_id`。
+
+### 机械臂主机聚合底盘从机
+
+`config/modules_arm.yaml` 已开启最小集群模式：
+
+```yaml
+cluster:
+  enabled: true
+  self: arm
+  hosts:
+    arm:
+      name: 机械臂主机
+      kind: local
+    chassis:
+      name: 底盘从机
+      kind: remote
+      base_url: http://192.168.1.112:8080
+```
+
+推荐启动顺序：
+
+```bash
+# 底盘从机，192.168.1.112
+cd /data/sinuo_project/robot_web_launcher
+./scripts/run_dev.sh
+
+# 机械臂主机，192.168.1.101
+cd ~/robot_web_launcher
+ROBOT_LAUNCHER_CONFIG=$PWD/config/modules_arm.yaml ./scripts/run_dev.sh
+```
+
+机械臂主机启动前先确认能访问底盘从机：
+
+```bash
+curl http://192.168.1.112:8080/api/modules
+```
+
+集群模式下，统一页面中的模块 ID 会带主机前缀，例如：
+
+```text
+arm:force_sensor
+chassis:lidar
+chassis:fast_lio
+```
+
+如果底盘从机后端未启动或 IP 不通，页面会显示 `底盘从机 离线`，不会影响机械臂主机本地模块操作。
 
 ## 重要注意
 

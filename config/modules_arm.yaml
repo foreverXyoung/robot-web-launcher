@@ -30,13 +30,11 @@ recorder:
       name: 录制传感器数据
       topics:
         - /camera1/color/image_raw
-        - /camera1/depth/image_raw
         - /force_sensor/wrench_raw
     all:
       name: 录制所有数据
       topics:
         - /camera1/color/image_raw
-        - /camera1/depth/image_raw
         - /force_sensor/wrench_raw
         - /raw_pose
         - /fine_pose
@@ -114,7 +112,7 @@ modules:
     autostart: false
     restart_on_crash: true
     startup_delay: 3
-    monitor_topics: ["/camera1/color/image_raw", "/camera1/depth/image_raw"]
+    monitor_topics: ["/camera1/color/image_raw"]
 
   icp_algorithm:
     name: ICP 算法

@@ -53,30 +53,6 @@ recorder:
         - /force_state
 
 modules:
-  arm_robot:
-    name: FR10 机器人
-    category: control
-    domain_id: 20
-    workdir: ${arm_ws}
-    setup: install/setup.bash
-    cmd: ["ros2", "launch", "fairino10_moveit2_config", "demo.launch.py"]
-    autostart: false
-    restart_on_crash: false
-    startup_delay: 4
-
-  pointcloud_processor:
-    name: 点云转换与裁切
-    category: algorithm
-    domain_id: 20
-    workdir: ${arm_ws}
-    setup: install/setup.bash
-    cmd: ["ros2", "launch", "pointcloud_processor", "pointcloud_processor.launch.py"]
-    autostart: false
-    restart_on_crash: true
-    depends_on: ["arm_robot", "arm_depth_camera"]
-    startup_delay: 2
-    monitor_topics: ["/raw_pose", "/fine_pose"]
-
   force_sensor:
     name: 力传感器
     category: sensor
@@ -88,18 +64,6 @@ modules:
     restart_on_crash: true
     startup_delay: 2
     monitor_topics: ["/force_sensor/wrench_raw"]
-
-  force_monitor:
-    name: 力传感器监控
-    category: algorithm
-    domain_id: 20
-    workdir: ${force_root}
-    cmd: ["python3", "force_monitor.py"]
-    autostart: false
-    restart_on_crash: true
-    depends_on: ["force_sensor"]
-    startup_delay: 1
-    monitor_topics: ["/force_state"]
 
   arm_depth_camera:
     name: 机械臂 RGB-D
@@ -124,6 +88,31 @@ modules:
     startup_delay: 3
     monitor_topics: ["/camera1/color/image_raw"]
 
+  pointcloud_processor:
+    name: 点云转换与裁切
+    category: algorithm
+    domain_id: 20
+    workdir: ${arm_ws}
+    setup: install/setup.bash
+    cmd: ["ros2", "launch", "pointcloud_processor", "pointcloud_processor.launch.py"]
+    autostart: false
+    restart_on_crash: true
+    depends_on: ["arm_robot", "arm_depth_camera"]
+    startup_delay: 2
+    monitor_topics: ["/raw_pose", "/fine_pose"]
+
+  force_monitor:
+    name: 力传感器监控
+    category: algorithm
+    domain_id: 20
+    workdir: ${force_root}
+    cmd: ["python3", "force_monitor.py"]
+    autostart: false
+    restart_on_crash: true
+    depends_on: ["force_sensor"]
+    startup_delay: 1
+    monitor_topics: ["/force_state"]
+
   icp_algorithm:
     name: ICP 算法
     category: algorithm
@@ -136,3 +125,14 @@ modules:
     depends_on: ["arm_depth_camera", "pointcloud_processor"]
     startup_delay: 2
     monitor_topics: ["/raw_pose", "/fine_pose"]
+
+  arm_robot:
+    name: FR10 机器人
+    category: control
+    domain_id: 20
+    workdir: ${arm_ws}
+    setup: install/setup.bash
+    cmd: ["ros2", "launch", "fairino10_moveit2_config", "demo.launch.py"]
+    autostart: false
+    restart_on_crash: false
+    startup_delay: 4

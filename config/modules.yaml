@@ -40,7 +40,7 @@ modules:
   lidar:
     name: MID360
     category: sensor
-    domain_id: 10
+    domain_id: 20
     workdir: ${project_root}/mid_ws
     setup: install/setup.bash
     env:
@@ -55,7 +55,7 @@ modules:
   imu:
     name: N300pro IMU
     category: sensor
-    domain_id: 10
+    domain_id: 20
     workdir: ${project_root}/n300_pro_ws
     setup: install/setup.bash
     cmd: ["ros2", "launch", "hipnuc_imu", "imu_spec_msg.launch.py"]
@@ -68,7 +68,7 @@ modules:
   g90_rtk:
     name: G90 RTK/GPS
     category: sensor
-    domain_id: 10
+    domain_id: 20
     workdir: ${project_root}/G90_ws
     setup: install/setup.bash
     cmd: ["ros2", "launch", "wheeltec_gps_driver", "wheeltec_dual_rtk_driver_unicore.launch.py"]
@@ -110,7 +110,7 @@ modules:
   fast_lio:
     name: FAST-LIO
     category: algorithm
-    domain_id: 10
+    domain_id: 20
     workdir: ${project_root}/mid_ws
     setup: install/setup.bash
     cmd: ["ros2", "launch", "fast_lio", "mapping.launch.py", "rviz:=false"]
@@ -137,7 +137,7 @@ modules:
   auto_explore:
     name: 导航模块
     category: algorithm
-    domain_id: 10
+    domain_id: 20
     workdir: ${project_root}/Auto_Explor_ws
     setup: install/setup.bash
     cmd: ["ros2", "launch", "vehicle_simulator", "system_real_robot.launch"]
@@ -150,7 +150,7 @@ modules:
   waypoint:
     name: Waypoint
     category: algorithm
-    domain_id: 10
+    domain_id: 20
     workdir: ${project_root}/Auto_Explor_ws
     setup: install/setup.bash
     cmd: ["ros2", "launch", "waypoint_example", "waypoint_example_garage.launch"]
@@ -173,7 +173,7 @@ modules:
   robot_controller:
     name: 底盘控制
     category: control
-    domain_id: 10
+    domain_id: 20
     workdir: ${project_root}/robot_contor_ws
     setup: install/setup.bash
     cmd: ["ros2", "run", "keya_robot_controller", "robot_controller_node"]

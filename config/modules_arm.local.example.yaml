@@ -1,0 +1,25 @@
+# Copy this file to config/modules_arm.local.yaml on the arm Orin when local
+# paths, Python environments, ports, or remote chassis IP differ from the
+# repository template. The real *.local.yaml file is intentionally ignored by git.
+
+paths:
+  home: /home/nvidia
+  icp_python: ${home}/miniconda3/envs/zhaigou/bin/python
+
+host: 0.0.0.0
+port: 8081
+
+cluster:
+  hosts:
+    chassis:
+      base_url: http://192.168.1.166:8080
+
+recorder:
+  output_dir: ${home}/yzf/bags
+
+modules:
+  arm_robot:
+    autostart: false
+
+  icp_algorithm:
+    python_script: "图片测试-all无去畸变-初值观测修正+pca修正+三次保底偏移-可视化-固定内参-xyz补偿.py"

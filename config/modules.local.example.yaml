@@ -1,0 +1,21 @@
+# Copy this file to config/modules.local.yaml on the chassis Orin when local
+# paths, Python environments, ports, or safety defaults differ from the
+# repository template. The real *.local.yaml file is intentionally ignored by git.
+
+paths:
+  project_root: /data/sinuo_project
+  object_detection_python: /home/nvidia1/miniforge3/envs/zhaigou/bin/python
+
+host: 0.0.0.0
+port: 8080
+
+recorder:
+  output_dir: ${project_root}/bags
+
+modules:
+  object_detection:
+    python_script: "导航-all2-单侧点云-先验更远-目标范围-先验选点优化-读取内参-先验姿态优化.py"
+    autostart: true
+
+  robot_controller:
+    autostart: false

@@ -175,6 +175,59 @@ conda_env: zhaigou
 conda_sh: /home/nvidia/anaconda3/etc/profile.d/conda.sh
 ```
 
+## 本地配置覆盖，避免 git pull 冲突
+
+仓库里的 `config/modules.yaml` 和 `config/modules_arm.yaml` 建议只当作模板维护，不再直接写现场差异。现场机器上的路径、IP、端口、Python 环境、录包目录等内容，放到同名的 `.local.yaml` 里：
+
+```text
+config/modules.yaml              仓库模板，底盘从机默认配置
+config/modules.local.yaml        底盘从机现场覆盖，不提交 git
+config/modules_arm.yaml          仓库模板，机械臂主机默认配置
+config/modules_arm.local.yaml    机械臂主机现场覆盖，不提交 git
+```
+
+启动时仍然可以使用原来的命令：
+
+```bash
+./scripts/run_dev.sh
+```
+
+程序会自动读取 `config/modules.yaml`，如果旁边存在 `config/modules.local.yaml`，就把 local 文件里的字段覆盖到模板上。机械臂配置同理：
+
+```bash
+ROBOT_LAUNCHER_CONFIG=$PWD/config/modules_arm.yaml ./scripts/run_dev.sh
+```
+
+如果存在 `config/modules_arm.local.yaml`，也会自动覆盖 `modules_arm.yaml`。
+
+第一次配置现场机器时，建议复制示例文件：
+
+```bash
+# 底盘从机
+cp config/modules.local.example.yaml config/modules.local.yaml
+
+# 机械臂主机
+cp config/modules_arm.local.example.yaml config/modules_arm.local.yaml
+```
+
+`.local.yaml` 只需要写和模板不同的部分，不需要复制整份配置。例如只修改从机 IP：
+
+```yaml
+cluster:
+  hosts:
+    chassis:
+      base_url: http://192.168.1.166:8080
+```
+
+或者只修改目标检测 Python 环境：
+
+```yaml
+paths:
+  object_detection_python: /home/nvidia1/miniforge3/envs/zhaigou/bin/python
+```
+
+合并规则是：字典递归合并，列表、字符串、数字直接由 `.local.yaml` 覆盖模板。因此 `monitor_setups`、`cmd`、`topics` 这类列表如果写在 local 里，会整体替换模板中的对应列表。
+
 ## 双 Orin 从机配置
 
 机械臂从机可以复用同一套后端，但使用独立配置文件：

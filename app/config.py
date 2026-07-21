@@ -77,6 +77,26 @@ class LauncherConfig:
     modules: dict[str, ModuleConfig]
 
 
+def _local_override_path(config_path: Path) -> Path:
+    return config_path.with_name(f"{config_path.stem}.local{config_path.suffix}")
+
+
+def _deep_merge_config(base: Any, override: Any) -> Any:
+    if isinstance(base, dict) and isinstance(override, dict):
+        merged = dict(base)
+        for key, value in override.items():
+            merged[key] = _deep_merge_config(merged.get(key), value)
+        return merged
+    return override
+
+
+def _load_yaml_file(path: Path) -> dict:
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    if not isinstance(data, dict):
+        raise ValueError(f"{path} must contain a YAML mapping")
+    return data
+
+
 def _as_str_list(value: Any, key: str) -> list[str]:
     if value is None:
         return []
@@ -178,7 +198,11 @@ def _load_cluster_config(raw: dict) -> ClusterConfig:
 
 def load_config(path: str | Path) -> LauncherConfig:
     config_path = Path(path).expanduser().resolve()
-    raw = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+    raw = _load_yaml_file(config_path)
+    if ".local" not in config_path.stem:
+        local_path = _local_override_path(config_path)
+        if local_path.exists():
+            raw = _deep_merge_config(raw, _load_yaml_file(local_path))
 
     base_dir = config_path.parent.parent
     path_variables = _load_path_variables(raw.get("paths"))

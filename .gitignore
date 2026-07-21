@@ -18,11 +18,11 @@ runtime/
 
 # Local overrides
 .env
-config/modules.local.yaml
+config/*.local.yaml
+config/*.bak
 
 # Editors / OS
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
-

@@ -6,6 +6,7 @@ import os
 import re
 import shutil
 import signal
+import subprocess
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
@@ -59,6 +60,7 @@ class ProcessManager:
                 health_nodes=module.health_nodes,
                 health_topics=module.health_topics,
                 monitor_topics=module.monitor_topics,
+                process_patterns=module.process_patterns,
             )
             result.append(item)
         return result
@@ -186,6 +188,16 @@ class ProcessManager:
                 return asdict(state)
 
             module = self.config.modules[module_id]
+            residual_pids = await self._find_module_residual_pids(module_id)
+            if residual_pids:
+                state.status = "crashed"
+                state.message = f"residual processes detected: {', '.join(map(str, residual_pids))}"
+                await self._broadcast(module_id, "error", state.message)
+                raise RuntimeError(
+                    f"{module_id} has residual processes: {', '.join(map(str, residual_pids))}. "
+                    "Stop or clean them before starting again."
+                )
+
             missing_deps = [
                 dep for dep in module.depends_on
                 if self.states[dep].status not in {"starting", "running"}
@@ -255,6 +267,7 @@ class ProcessManager:
                     await self._broadcast(module_id, "error", state.message)
                     return asdict(state)
                 return await self._mark_stopped_pid(module_id)
+            await self._cleanup_module_residuals(module_id)
             state.status = "stopped"
             state.pid = None
             state.message = "stopped"
@@ -403,6 +416,7 @@ class ProcessManager:
         state.stopped_at = datetime.now().isoformat(timespec="seconds")
         state.message = f"stopped rc={process.returncode}"
         self._remove_process_state(module_id)
+        await self._cleanup_module_residuals(module_id)
         await self._broadcast(module_id, "status", state.message)
         return asdict(state)
 
@@ -415,6 +429,7 @@ class ProcessManager:
         state.stopped_at = datetime.now().isoformat(timespec="seconds")
         state.message = "stopped recovered process"
         self._remove_process_state(module_id)
+        await self._cleanup_module_residuals(module_id)
         await self._broadcast(module_id, "status", state.message)
         return asdict(state)
 
@@ -515,6 +530,64 @@ class ProcessManager:
 
     def _process_state_path(self, module_id: str) -> Path:
         return self.config.state_dir / f"{module_id}.json"
+
+    async def _find_module_residual_pids(self, module_id: str) -> list[int]:
+        module = self.config.modules[module_id]
+        if not module.process_patterns:
+            return []
+        return await asyncio.to_thread(self._find_process_pattern_pids, module.process_patterns)
+
+    async def _cleanup_module_residuals(self, module_id: str) -> None:
+        module = self.config.modules[module_id]
+        if not module.process_patterns:
+            return
+        pids = await self._find_module_residual_pids(module_id)
+        if not pids:
+            return
+        await self._broadcast(module_id, "warning", f"residual processes after stop: {', '.join(map(str, pids))}")
+        for sig, wait_sec, label in (
+            (signal.SIGTERM, 2.0, "SIGTERM"),
+            (signal.SIGKILL, 1.0, "SIGKILL"),
+        ):
+            alive = [pid for pid in pids if self._pid_alive(pid)]
+            if not alive:
+                return
+            await self._broadcast(module_id, "status", f"sending {label} to residual processes")
+            for pid in alive:
+                self._send_signal_to_pid(pid, sig)
+            await asyncio.sleep(wait_sec)
+        remaining = [pid for pid in pids if self._pid_alive(pid)]
+        if remaining:
+            state = self.states[module_id]
+            state.status = "crashed"
+            state.message = f"residual processes still alive: {', '.join(map(str, remaining))}"
+            await self._broadcast(module_id, "error", state.message)
+
+    @staticmethod
+    def _find_process_pattern_pids(patterns: list[str]) -> list[int]:
+        if os.name != "posix":
+            return []
+        current_pid = os.getpid()
+        pids: set[int] = set()
+        for pattern in patterns:
+            try:
+                completed = subprocess.run(
+                    ["pgrep", "-f", "--", pattern],
+                    check=False,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                    text=True,
+                )
+            except FileNotFoundError:
+                return []
+            for line in completed.stdout.splitlines():
+                try:
+                    pid = int(line.strip())
+                except ValueError:
+                    continue
+                if pid > 0 and pid != current_pid:
+                    pids.add(pid)
+        return sorted(pids)
 
     @staticmethod
     def _pid_alive(pid: int) -> bool:

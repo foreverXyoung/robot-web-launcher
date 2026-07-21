@@ -2,8 +2,8 @@
 set -euo pipefail
 
 MODE="${1:---dry-run}"
-if [[ "${MODE}" != "--dry-run" && "${MODE}" != "--kill" ]]; then
-  echo "Usage: $0 [--dry-run|--kill]"
+if [[ "${MODE}" != "--dry-run" && "${MODE}" != "--kill" && "${MODE}" != "--force" ]]; then
+  echo "Usage: $0 [--dry-run|--kill|--force]"
   exit 2
 fi
 
@@ -11,6 +11,7 @@ patterns=(
   "ros2 launch livox_ros_driver2 msg_MID360_launch.py"
   "livox_ros_driver2_node"
   "ros2 launch hipnuc_imu imu_spec_msg.launch.py"
+  "hipnuc_imu/lib/hipnuc"
   "hipnuc_imu/talker"
   "ros2 launch wheeltec_gps_driver wheeltec_dual_rtk_driver_unicore.launch.py"
   "dual_rtk_driver_node"
@@ -95,7 +96,7 @@ for pid in "${pids[@]}"; do
   fi
 done
 
-if (( ${#remaining[@]} > 0 )); then
+if [[ ${#remaining[@]} -gt 0 || "${MODE}" == "--force" ]]; then
   echo "Some processes are still alive, sending SIGKILL..."
   for pid in "${remaining[@]}"; do
     pgid="$(ps -o pgid= -p "${pid}" | tr -d ' ' || true)"
@@ -107,4 +108,23 @@ if (( ${#remaining[@]} > 0 )); then
   done
 fi
 
-echo "Cleanup complete."
+sleep 1
+remaining=()
+declare -A final_seen=()
+for pattern in "${patterns[@]}"; do
+  while IFS= read -r pid; do
+    [[ -z "${pid}" || "${pid}" == "$$" ]] && continue
+    if [[ -z "${final_seen[${pid}]:-}" ]]; then
+      final_seen["${pid}"]=1
+      remaining+=("${pid}")
+    fi
+  done < <(pgrep -f "${pattern}" || true)
+done
+
+if (( ${#remaining[@]} > 0 )); then
+  echo "Cleanup finished, but matching processes are still alive:"
+  ps -fp "${remaining[@]}" || true
+  exit 1
+fi
+
+echo "Cleanup complete. No matching ROS module processes remain."

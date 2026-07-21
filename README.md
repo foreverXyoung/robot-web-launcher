@@ -310,3 +310,4 @@ chassis:fast_lio
 6. 后端退出时会尝试停止所有由它管理的 ROS 模块；若后端异常退出导致旧进程残留，可用 `scripts/cleanup_ros_modules.sh` 清理。
 7. 频率监测按 topic 独立线程连续运行，并优先使用 rclpy raw subscription，只统计消息到达时间，尽量避免对 MID360 `/livox/lidar` 这类大消息做 Python 反序列化。连续监测高频话题仍会占用明显 CPU，因此默认关闭，需要时再从页面开启。
 8. `depends_on` 只用于页面提示和启动前 warning，不会自动启动依赖模块；底盘控制等安全敏感模块应保持 `autostart: false`，由现场人员确认后手动启动。
+9. 对 IMU 这类容易残留的硬件驱动，可以在模块配置里写 `process_patterns`。后端启动前会检查这些进程，发现残留时拒绝重复启动；停止后也会按这些 pattern 做兜底清理。N300pro IMU 默认已配置 `hipnuc_imu/lib/hipnuc` 等 pattern。

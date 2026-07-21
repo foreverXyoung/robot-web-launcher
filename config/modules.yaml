@@ -64,6 +64,10 @@ modules:
     startup_delay: 2
     health_nodes: ["/IMU_publisher"]
     monitor_topics: ["/IMU_data"]
+    process_patterns:
+      - "ros2 launch hipnuc_imu imu_spec_msg.launch.py"
+      - "hipnuc_imu/lib/hipnuc"
+      - "hipnuc_imu/talker"
 
   g90_rtk:
     name: G90 RTK/GPS

@@ -28,6 +28,7 @@ class ModuleConfig:
     health_nodes: list[str] = field(default_factory=list)
     health_topics: list[str] = field(default_factory=list)
     monitor_topics: list[str] = field(default_factory=list)
+    process_patterns: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -261,6 +262,7 @@ def load_config(path: str | Path) -> LauncherConfig:
             health_nodes=_as_str_list(item.get("health_nodes"), f"{module_id}.health_nodes"),
             health_topics=_as_str_list(item.get("health_topics"), f"{module_id}.health_topics"),
             monitor_topics=_as_str_list(item.get("monitor_topics"), f"{module_id}.monitor_topics"),
+            process_patterns=_as_str_list(item.get("process_patterns"), f"{module_id}.process_patterns"),
         )
 
     for module in modules.values():

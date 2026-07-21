@@ -1,0 +1,138 @@
+host: 0.0.0.0
+port: 8081
+paths:
+  home: /home/nvidia1
+  yzf_root: ${home}/yzf
+  rq_root: ${home}/rq
+  ros_setup: /opt/ros/humble/setup.bash
+  arm_ws: ${yzf_root}/TEST_demo_7_19/FR10_test
+  force_ws: ${yzf_root}/force_sensor/force_ros2_ws
+  force_root: ${yzf_root}/force_sensor
+  arm_camera_ws: ${rq_root}/orbbec_336l
+  icp_root: ${rq_root}/object
+  arm_bridge_ws: ${rq_root}/bridge_info_joint
+  icp_python: ${home}/miniforge3/envs/zhaigou/bin/python
+monitor_setups:
+  - ${arm_ws}/install/setup.bash
+  - ${force_ws}/install/setup.bash
+  - ${arm_camera_ws}/install/setup.bash
+log_dir: runtime/logs-arm
+state_dir: runtime/state-arm
+stop_timeout_sec: 10
+recorder:
+  enabled: true
+  output_dir: ${yzf_root}/bags
+  default_domain_id: 20
+  min_free_gb: 10
+  stop_timeout_sec: 12
+  modes:
+    sensors:
+      name: 录制传感器数据
+      topics:
+        - /camera1/color/image_raw
+        - /camera1/depth/image_raw
+        - /force_sensor/wrench_raw
+    all:
+      name: 录制所有数据
+      topics:
+        - /camera1/color/image_raw
+        - /camera1/depth/image_raw
+        - /force_sensor/wrench_raw
+        - /raw_pose
+        - /fine_pose
+        - /arm_state
+        - /robot_state
+        - /force_state
+
+modules:
+  arm_robot:
+    name: FR10 机器人
+    category: control
+    domain_id: 20
+    workdir: ${arm_ws}
+    setup: install/setup.bash
+    cmd: ["ros2", "launch", "fairino10_moveit2_config", "demo.launch.py"]
+    autostart: false
+    restart_on_crash: false
+    startup_delay: 4
+
+  pointcloud_processor:
+    name: 点云转换与裁切
+    category: algorithm
+    domain_id: 20
+    workdir: ${arm_ws}
+    setup: install/setup.bash
+    cmd: ["ros2", "launch", "pointcloud_processor", "pointcloud_processor.launch.py"]
+    autostart: false
+    restart_on_crash: true
+    depends_on: ["arm_robot", "arm_depth_camera"]
+    startup_delay: 2
+
+  force_sensor:
+    name: 力传感器
+    category: sensor
+    domain_id: 20
+    workdir: ${force_ws}
+    setup: install/setup.bash
+    cmd: ["ros2", "run", "sri_force_sensor", "sri_force_sensor_node"]
+    autostart: false
+    restart_on_crash: true
+    startup_delay: 2
+    monitor_topics: ["/force_sensor/wrench_raw"]
+
+  force_monitor:
+    name: 力传感器监控
+    category: algorithm
+    domain_id: 20
+    workdir: ${force_root}
+    cmd: ["python3", "force_monitor.py"]
+    autostart: false
+    restart_on_crash: true
+    depends_on: ["force_sensor"]
+    startup_delay: 1
+
+  arm_depth_camera:
+    name: 机械臂 RGB-D
+    category: sensor
+    domain_id: 20
+    workdir: ${arm_camera_ws}
+    setup: install/setup.bash
+    cmd:
+      - ros2
+      - launch
+      - orbbec_camera
+      - gemini_330_series.launch.py
+      - color_width:=640
+      - color_height:=400
+      - depth_width:=640
+      - depth_height:=400
+      - color_fps:=30
+      - depth_fps:=30
+      - camera_name:=camera1
+    autostart: false
+    restart_on_crash: true
+    startup_delay: 3
+    monitor_topics: ["/camera1/color/image_raw", "/camera1/depth/image_raw"]
+
+  icp_algorithm:
+    name: ICP 算法
+    category: algorithm
+    domain_id: 20
+    workdir: ${icp_root}
+    cmd: ["${icp_python}"]
+    python_script: "图片测试-all无去畸变-初值观测修正+pca修正+三次保底偏移-可视化-固定内参-xyz补偿.py"
+    autostart: false
+    restart_on_crash: true
+    depends_on: ["arm_depth_camera", "pointcloud_processor"]
+    startup_delay: 2
+
+  arm_domain_bridge:
+    name: 机械臂域桥
+    category: algorithm
+    domain_id: 20
+    workdir: ${arm_bridge_ws}
+    setup: install/setup.bash
+    cmd: ["ros2", "run", "domain_bridge_cpp", "domain_bridge_event_bundle"]
+    autostart: false
+    restart_on_crash: true
+    startup_delay: 1

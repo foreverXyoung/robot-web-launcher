@@ -175,6 +175,33 @@ conda_env: zhaigou
 conda_sh: /home/nvidia/anaconda3/etc/profile.d/conda.sh
 ```
 
+## 双 Orin 从机配置
+
+机械臂从机可以复用同一套后端，但使用独立配置文件：
+
+```bash
+cd /data/sinuo_project/robot_web_launcher
+ROBOT_LAUNCHER_CONFIG=/data/sinuo_project/robot_web_launcher/config/modules_arm.yaml ./scripts/run_dev.sh
+```
+
+`config/modules_arm.yaml` 默认监听 `8081` 端口，适合在第二台 Orin 上作为本地 Agent 运行：
+
+```text
+http://从机IP:8081
+```
+
+这份配置把机械臂流程拆成：
+
+- `FR10 机器人`
+- `点云转换与裁切`
+- `力传感器`
+- `力传感器监控`
+- `机械臂 RGB-D`
+- `ICP 算法`
+- `机械臂域桥`
+
+机械臂、相机、力传感器、ICP 等模块默认都保持 `autostart: false`，由现场人员确认后手动启动。示例配置默认使用 `ROS_DOMAIN_ID=20`；如果手工终端流程仍在其它 Domain 运行，需要同步修改 `modules_arm.yaml` 中各模块的 `domain_id`。
+
 ## 重要注意
 
 1. `uvicorn --workers` 必须是 `1`，否则会有多个进程管理器同时控制同一批 ROS 模块。

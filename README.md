@@ -228,6 +228,38 @@ paths:
 
 合并规则是：字典递归合并，列表、字符串、数字直接由 `.local.yaml` 覆盖模板。因此 `monitor_setups`、`cmd`、`topics` 这类列表如果写在 local 里，会整体替换模板中的对应列表。
 
+## 调试状态发布
+
+控制台支持一个独立的“调试状态发布”栏目，用于在网页上手动发送固定的 `ros2 topic pub --once` 调试状态位。该功能只允许发布 YAML 白名单中配置好的 topic 和 payload，不开放任意 topic 输入。
+
+机械臂配置中默认包含：
+
+```yaml
+debug_publish:
+  enabled: true
+  commands:
+    robot_state_2:
+      name: robot_state = 2
+      domain_id: 20
+      topic: /robot_state
+      msg_type: std_msgs/msg/Int32
+      payload: "data: 2"
+    arm_state_3:
+      name: arm_state = 3
+      domain_id: 20
+      topic: /arm_state
+      msg_type: std_msgs/msg/Int32
+      payload: "data: 3"
+    target_process_command_1:
+      name: target_process_command = 1
+      domain_id: 20
+      topic: /target_process_command
+      msg_type: std_msgs/msg/Int32
+      payload: "data: 1"
+```
+
+如果现场要临时增加调试项，建议写到 `config/modules_arm.local.yaml`，不要直接改模板文件。
+
 ## 双 Orin 从机配置
 
 机械臂从机可以复用同一套后端，但使用独立配置文件：

@@ -64,6 +64,14 @@
     .radio-row label, .field label { color: #aab8df; font-size: 13px; }
     .field { display: grid; gap: 4px; }
     .recorder-status { display: flex; gap: 12px; flex-wrap: wrap; color: #9aa8ce; font-size: 13px; overflow-wrap: anywhere; }
+    .debug-panel { padding: 12px; display: grid; gap: 10px; border-bottom: 1px solid #273254; background: rgba(15, 24, 49, .66); }
+    .debug-panel-head { display: flex; justify-content: space-between; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .debug-title { font-weight: 700; }
+    .debug-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 8px; }
+    .debug-card { padding: 10px; border: 1px solid #2b3b62; border-radius: 12px; background: #101a34; display: grid; gap: 7px; }
+    .debug-card-title { font-weight: 700; }
+    .debug-card-meta { color: #9aa8ce; font-size: 12px; overflow-wrap: anywhere; }
+    .debug-card button { justify-self: start; }
     #logs { height: calc(100vh - 165px); overflow: auto; padding: 12px; background: #060912; font-family: ui-monospace, Consolas, monospace; font-size: 13px; white-space: pre-wrap; }
     .log-line { margin: 0 0 4px; }
     .muted { color: #9aa8ce; }
@@ -87,6 +95,9 @@
       .recorder-panel { padding: 8px; }
       .recorder-grid { grid-template-columns: 1fr; }
       .recorder-grid button { width: 100%; }
+      .debug-panel { padding: 8px; }
+      .debug-grid { grid-template-columns: 1fr; }
+      .debug-card button { width: 100%; }
       .toolbar { padding: 8px; gap: 7px; }
       .toolbar button { flex: 1 1 calc(50% - 7px); }
       .toolbar select { flex: 1 1 100%; width: 100%; }
@@ -149,6 +160,16 @@
         </div>
         <div class="recorder-status" id="recorderState">录制状态读取中...</div>
       </div>
+      <div class="debug-panel" id="debugPanel">
+        <div class="debug-panel-head">
+          <div>
+            <div class="debug-title">调试状态发布</div>
+            <div class="muted">白名单 ros2 topic pub --once，用于源码联调状态位</div>
+          </div>
+          <span class="muted" id="debugState">读取中...</span>
+        </div>
+        <div class="debug-grid" id="debugCommands"></div>
+      </div>
       <div class="toolbar">
         <button onclick="startSelected()">启动勾选</button>
         <button class="stop" onclick="stopSelected()">关闭勾选</button>
@@ -199,6 +220,7 @@
     let rates = [];
     let monitorStatus = { enabled: false, started: false, error: null };
     let recorderStatus = { enabled: false, status: "stopped", modes: [] };
+    let debugPublishers = { enabled: false, commands: [] };
     let clusterStatus = { enabled: false, hosts: [] };
     let moduleRefreshTimer = null;
     let logFilter = "all";
@@ -241,6 +263,7 @@
         loadModules(),
         loadMonitorStatus(),
         loadRecorderStatus(),
+        loadDebugPublishers(),
       ]);
       await loadSensorRates();
     }
@@ -287,6 +310,15 @@
     async function loadRecorderStatus() {
       recorderStatus = await api("/api/recorder");
       renderRecorder();
+    }
+
+    async function loadDebugPublishers() {
+      try {
+        debugPublishers = await api("/api/debug-publishers");
+      } catch (e) {
+        debugPublishers = { enabled: false, commands: [], error: formatError(e) };
+      }
+      renderDebugPublishers();
     }
 
     async function loadConfigCheck(showDetails = false) {
@@ -422,6 +454,34 @@
       state.textContent = parts.join(" ｜ ");
     }
 
+    function renderDebugPublishers() {
+      const panel = document.getElementById("debugPanel");
+      const state = document.getElementById("debugState");
+      const commands = document.getElementById("debugCommands");
+      const items = debugPublishers.commands || [];
+      if (!debugPublishers.enabled && items.length === 0) {
+        panel.style.display = "none";
+        return;
+      }
+      panel.style.display = "";
+      if (!debugPublishers.enabled) {
+        state.textContent = "已关闭";
+      } else if (debugPublishers.error) {
+        state.textContent = `读取失败：${debugPublishers.error}`;
+      } else {
+        state.textContent = `${items.length} 个调试指令`;
+      }
+      commands.innerHTML = items.map(item => `
+        <div class="debug-card">
+          <div class="debug-card-title">${escapeHtml(item.name)}</div>
+          <div class="debug-card-meta">${escapeHtml(item.topic)} · ${escapeHtml(item.msg_type)} · Domain ${item.domain_id ?? "-"}</div>
+          <div class="debug-card-meta">${escapeHtml(item.payload)}</div>
+          ${item.description ? `<div class="debug-card-meta">${escapeHtml(item.description)}</div>` : ""}
+          <button ${debugPublishers.enabled ? "" : "disabled"} onclick="publishDebug('${escapeHtml(item.id)}')">发送一次</button>
+        </div>
+      `).join("");
+    }
+
     function renderLogFilterOptions() {
       const select = document.getElementById("logFilter");
       const current = select.value || logFilter;
@@ -430,6 +490,7 @@
         { id: "system", name: "system" },
         { id: "config", name: "config" },
         { id: "recorder", name: "数据录制" },
+        { id: "debug", name: "调试发布" },
         ...uniqueHosts().map(h => ({ id: `${h.id}:system`, name: `${h.name} / system` })),
         ...modules.map(m => ({ id: m.id, name: `${m.host_name ? `${m.host_name} / ` : ""}${m.name} (${m.id})` })),
       ];
@@ -570,6 +631,17 @@
       await runAction("停止录制", async () => {
         recorderStatus = await api("/api/recorder/stop", { method: "POST" });
         renderRecorder();
+      });
+    }
+
+    async function publishDebug(id) {
+      await runAction(`发送调试指令 ${id}`, async () => {
+        const result = await api(`/api/debug-publishers/${id}/publish`, { method: "POST" });
+        appendLog({
+          time: new Date().toLocaleTimeString(),
+          module: "debug",
+          message: `${result.name} 已发送：${result.topic} ${result.payload}`,
+        });
       });
     }
 

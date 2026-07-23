@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from .cluster import ClusterManager
 from .config import load_config
+from .debug_publisher import DebugPublisherManager
 from .manager import ProcessManager
 from .recorder import RecorderManager
 
@@ -20,6 +21,7 @@ CONFIG_PATH = Path(os.environ.get("ROBOT_LAUNCHER_CONFIG", BASE_DIR / "config" /
 config = load_config(CONFIG_PATH)
 manager = ProcessManager(config)
 recorder = RecorderManager(config, lambda event, message: manager.publish_event("recorder", event, message))
+debug_publisher = DebugPublisherManager(config, lambda event, message: manager.publish_event("debug", event, message))
 cluster = ClusterManager(config, manager)
 app = FastAPI(title="Robot Web Launcher")
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
@@ -114,6 +116,19 @@ async def start_recorder(request: RecorderStart) -> dict:
 async def stop_recorder() -> dict:
     try:
         return await recorder.stop()
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/debug-publishers")
+async def debug_publishers() -> dict:
+    return debug_publisher.list_commands()
+
+
+@app.post("/api/debug-publishers/{command_id}/publish")
+async def publish_debug_command(command_id: str) -> dict:
+    try:
+        return await debug_publisher.publish(command_id)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

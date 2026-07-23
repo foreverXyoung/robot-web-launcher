@@ -51,6 +51,30 @@ recorder:
         - /arm_state
         - /robot_state
         - /force_state
+debug_publish:
+  enabled: true
+  commands:
+    robot_state_2:
+      name: robot_state = 2
+      domain_id: 20
+      topic: /robot_state
+      msg_type: std_msgs/msg/Int32
+      payload: "data: 2"
+      description: 发布机器人状态调试位
+    arm_state_3:
+      name: arm_state = 3
+      domain_id: 20
+      topic: /arm_state
+      msg_type: std_msgs/msg/Int32
+      payload: "data: 3"
+      description: 发布机械臂状态调试位
+    target_process_command_1:
+      name: target_process_command = 1
+      domain_id: 20
+      topic: /target_process_command
+      msg_type: std_msgs/msg/Int32
+      payload: "data: 1"
+      description: 发布目标处理流程调试指令
 
 modules:
   force_sensor:

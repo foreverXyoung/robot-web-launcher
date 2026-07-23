@@ -49,6 +49,23 @@ class RecorderConfig:
 
 
 @dataclass(frozen=True)
+class DebugPublishCommandConfig:
+    id: str
+    name: str
+    topic: str
+    msg_type: str
+    payload: str
+    domain_id: int | None = None
+    description: str = ""
+
+
+@dataclass(frozen=True)
+class DebugPublishConfig:
+    enabled: bool
+    commands: dict[str, DebugPublishCommandConfig]
+
+
+@dataclass(frozen=True)
 class ClusterHostConfig:
     id: str
     name: str
@@ -74,6 +91,7 @@ class LauncherConfig:
     state_dir: Path
     stop_timeout_sec: float
     recorder: RecorderConfig
+    debug_publish: DebugPublishConfig
     cluster: ClusterConfig
     modules: dict[str, ModuleConfig]
 
@@ -167,6 +185,40 @@ def _load_recorder_config(raw: dict, base_dir: Path, path_variables: dict[str, s
         min_free_gb=float(item.get("min_free_gb", 10.0)),
         stop_timeout_sec=float(item.get("stop_timeout_sec", 12.0)),
         modes=modes,
+    )
+
+
+def _load_debug_publish_config(raw: dict, path_variables: dict[str, str]) -> DebugPublishConfig:
+    item = raw.get("debug_publish") or {}
+    if not isinstance(item, dict):
+        raise ValueError("debug_publish must be a mapping")
+
+    commands: dict[str, DebugPublishCommandConfig] = {}
+    for command_id, command_item in (item.get("commands") or {}).items():
+        if not isinstance(command_item, dict):
+            raise ValueError(f"debug_publish.commands.{command_id} must be a mapping")
+        topic = str(command_item.get("topic", "")).strip()
+        msg_type = str(command_item.get("msg_type", "")).strip()
+        payload = str(command_item.get("payload", "")).strip()
+        if not topic:
+            raise ValueError(f"debug_publish.commands.{command_id}.topic is required")
+        if not msg_type:
+            raise ValueError(f"debug_publish.commands.{command_id}.msg_type is required")
+        if not payload:
+            raise ValueError(f"debug_publish.commands.{command_id}.payload is required")
+        commands[str(command_id)] = DebugPublishCommandConfig(
+            id=str(command_id),
+            name=str(command_item.get("name", command_id)),
+            topic=_expand_config_vars(topic, path_variables),
+            msg_type=_expand_config_vars(msg_type, path_variables),
+            payload=_expand_config_vars(payload, path_variables),
+            domain_id=command_item.get("domain_id"),
+            description=str(command_item.get("description", "")),
+        )
+
+    return DebugPublishConfig(
+        enabled=bool(item.get("enabled", False)),
+        commands=commands,
     )
 
 
@@ -286,6 +338,7 @@ def load_config(path: str | Path) -> LauncherConfig:
         state_dir=state_dir,
         stop_timeout_sec=float(raw.get("stop_timeout_sec", 8.0)),
         recorder=_load_recorder_config(raw, base_dir, path_variables),
+        debug_publish=_load_debug_publish_config(raw, path_variables),
         cluster=_load_cluster_config(raw),
         modules=modules,
     )

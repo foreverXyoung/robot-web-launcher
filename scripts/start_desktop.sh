@@ -8,7 +8,9 @@ PYTHON_BIN="${ROBOT_LAUNCHER_PYTHON:-python3}"
 PID_FILE="${ROBOT_LAUNCHER_PID_FILE:-$(pwd)/runtime/web_launcher.pid}"
 LOCK_FILE="${ROBOT_LAUNCHER_LOCK_FILE:-$(pwd)/runtime/web_launcher.lock}"
 LOG_FILE="${ROBOT_LAUNCHER_DESKTOP_LOG:-$(pwd)/runtime/logs/web_launcher.log}"
+TITLE="${ROBOT_LAUNCHER_DESKTOP_TITLE:-拉风机器人控制台}"
 START_WAIT_SEC="${ROBOT_LAUNCHER_START_WAIT_SEC:-90}"
+STRICT_PID_FILE="${ROBOT_LAUNCHER_STRICT_PID_FILE:-0}"
 
 mkdir -p "$(dirname "${PID_FILE}")" "$(dirname "${LOG_FILE}")"
 exec >> "${LOG_FILE}" 2>&1
@@ -36,7 +38,7 @@ fi
 
 notify() {
   if command -v notify-send >/dev/null 2>&1; then
-    notify-send "拉风机器人控制台" "$1" >/dev/null 2>&1 || true
+    notify-send "${TITLE}" "$1" >/dev/null 2>&1 || true
   fi
 }
 
@@ -57,6 +59,10 @@ find_launcher_pid() {
       return 0
     fi
     rm -f "${PID_FILE}"
+  fi
+
+  if [[ "${STRICT_PID_FILE}" == "1" ]]; then
+    return 1
   fi
 
   pid="$(pgrep -f '[u]vicorn app\.main:app' | head -n 1 || true)"

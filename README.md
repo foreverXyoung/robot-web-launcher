@@ -84,10 +84,21 @@ cd /data/sinuo_project/robot_web_launcher
 ./scripts/install_desktop_shortcuts.sh
 ```
 
+机械臂主机如果要默认加载 `config/modules_arm.yaml`，安装机械臂专用快捷方式：
+
+```bash
+cd ~/robot_web_launcher
+./scripts/install_desktop_shortcuts.sh --arm
+```
+
+机械臂专用快捷方式会使用独立的 pid、lock 和日志文件，不会和底盘默认快捷方式互相误停。默认打开 `modules_arm.yaml` 中配置的端口，一般是 `8081`。
+
 安装后可以从 Ubuntu 应用菜单搜索：
 
 - `拉风机器人控制台`：后台未运行时启动服务，等待接口就绪后打开浏览器；已经运行时只打开浏览器，不会重复启动。
 - `停止拉风机器人控制台`：先发送正常退出信号，等待后台停止所管理的 ROS 模块，超时后才强制结束。
+- `机械臂机器人控制台`：启动机械臂主机配置。
+- `停止机械臂机器人控制台`：停止机械臂主机配置启动的后台服务。
 
 系统支持桌面图标时，也会把图标复制到当前用户的桌面目录。首次双击若被 Ubuntu 拦截，右键图标选择“允许启动”。
 
@@ -101,6 +112,9 @@ runtime/logs/web_launcher.log
 
 ```bash
 ./scripts/install_desktop_shortcuts.sh --remove
+
+# 卸载机械臂专用快捷方式
+./scripts/install_desktop_shortcuts.sh --arm --remove
 ```
 
 桌面启动和 systemd 服务不要同时使用。如果以后启用 systemd，应先用“停止拉风机器人控制台”结束桌面启动的后台，再安装并启动 systemd 服务。

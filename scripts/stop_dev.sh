@@ -10,6 +10,7 @@ PORT="${ROBOT_LAUNCHER_PORT:-${server_config[1]}}"
 PID_FILE="${ROBOT_LAUNCHER_PID_FILE:-$(pwd)/runtime/web_launcher.pid}"
 LOCK_FILE="${ROBOT_LAUNCHER_LOCK_FILE:-$(pwd)/runtime/web_launcher.lock}"
 STOP_WAIT_SEC="${ROBOT_LAUNCHER_STOP_WAIT_SEC:-90}"
+STRICT_PID_FILE="${ROBOT_LAUNCHER_STRICT_PID_FILE:-0}"
 PATTERN="uvicorn app.main:app"
 
 mkdir -p "$(dirname "${PID_FILE}")"
@@ -38,13 +39,15 @@ if [[ -f "${PID_FILE}" ]]; then
   fi
 fi
 
-while IFS= read -r pid; do
-  [[ -z "${pid}" || "${pid}" == "$$" ]] && continue
-  if [[ -z "${seen[${pid}]:-}" ]] && is_launcher_pid "${pid}"; then
-    pids+=("${pid}")
-    seen["${pid}"]=1
-  fi
-done < <(pgrep -f '[u]vicorn app\.main:app' || true)
+if [[ "${STRICT_PID_FILE}" != "1" ]]; then
+  while IFS= read -r pid; do
+    [[ -z "${pid}" || "${pid}" == "$$" ]] && continue
+    if [[ -z "${seen[${pid}]:-}" ]] && is_launcher_pid "${pid}"; then
+      pids+=("${pid}")
+      seen["${pid}"]=1
+    fi
+  done < <(pgrep -f '[u]vicorn app\.main:app' || true)
+fi
 
 if (( ${#pids[@]} > 0 )); then
   for pid in "${pids[@]}"; do

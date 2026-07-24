@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import NoReturn
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
@@ -25,6 +26,11 @@ debug_publisher = DebugPublisherManager(config, lambda event, message: manager.p
 cluster = ClusterManager(config, manager)
 app = FastAPI(title="Robot Web Launcher")
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
+
+
+def raise_http_error(exc: Exception) -> NoReturn:
+    message = str(exc).strip() or type(exc).__name__
+    raise HTTPException(status_code=400, detail=message) from exc
 
 
 class ModuleSelection(BaseModel):
@@ -81,7 +87,7 @@ async def sensor_rates() -> list[dict]:
     try:
         return await cluster.sensor_rates()
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise_http_error(exc)
 
 
 @app.get("/api/monitor")
@@ -109,7 +115,7 @@ async def start_recorder(request: RecorderStart) -> dict:
     try:
         return await recorder.start(request.mode, request.domain_id, request.name)
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise_http_error(exc)
 
 
 @app.post("/api/recorder/stop")
@@ -117,7 +123,7 @@ async def stop_recorder() -> dict:
     try:
         return await recorder.stop()
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise_http_error(exc)
 
 
 @app.get("/api/debug-publishers")
@@ -130,7 +136,7 @@ async def publish_debug_command(command_id: str) -> dict:
     try:
         return await debug_publisher.publish(command_id)
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise_http_error(exc)
 
 
 @app.post("/api/modules/{module_id}/start")
@@ -138,7 +144,7 @@ async def start_module(module_id: str) -> dict:
     try:
         return await cluster.start_module(module_id)
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise_http_error(exc)
 
 
 @app.post("/api/modules/{module_id}/stop")
@@ -146,7 +152,7 @@ async def stop_module(module_id: str) -> dict:
     try:
         return await cluster.stop_module(module_id)
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise_http_error(exc)
 
 
 @app.post("/api/modules/{module_id}/restart")
@@ -154,7 +160,7 @@ async def restart_module(module_id: str) -> dict:
     try:
         return await cluster.restart_module(module_id)
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise_http_error(exc)
 
 
 @app.post("/api/start-selected")
@@ -163,7 +169,7 @@ async def start_selected(selection: ModuleSelection) -> dict:
         await cluster.start_many(selection.modules)
         return {"ok": True}
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise_http_error(exc)
 
 
 @app.post("/api/stop-selected")
@@ -172,7 +178,7 @@ async def stop_selected(selection: ModuleSelection) -> dict:
         await cluster.stop_many(selection.modules)
         return {"ok": True}
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise_http_error(exc)
 
 
 @app.post("/api/categories/{category}/start")
@@ -181,7 +187,7 @@ async def start_category(category: str) -> dict:
         await cluster.start_category(category)
         return {"ok": True}
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise_http_error(exc)
 
 
 @app.post("/api/categories/{category}/stop")
@@ -190,7 +196,7 @@ async def stop_category(category: str) -> dict:
         await cluster.stop_category(category)
         return {"ok": True}
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise_http_error(exc)
 
 
 @app.websocket("/ws/events")

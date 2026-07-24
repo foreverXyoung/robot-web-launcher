@@ -50,9 +50,12 @@ class DebugPublisherManager:
         )
         try:
             stdout, _ = await asyncio.wait_for(process.communicate(), timeout=self.timeout_sec)
-        except TimeoutError as exc:
+        except (asyncio.TimeoutError, TimeoutError) as exc:
             process.kill()
-            await process.wait()
+            try:
+                await asyncio.wait_for(process.wait(), timeout=2.0)
+            except (asyncio.TimeoutError, TimeoutError):
+                pass
             await self.publish_event("error", f"{command_id} timeout after {self.timeout_sec}s")
             raise RuntimeError(f"debug publish timeout after {self.timeout_sec}s") from exc
 
@@ -90,6 +93,8 @@ class DebugPublisherManager:
             "topic",
             "pub",
             "--once",
+            "--wait-matching-subscriptions",
+            "0",
             command.topic,
             command.msg_type,
             command.payload,

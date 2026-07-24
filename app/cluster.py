@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import urllib.error
 import urllib.request
 from datetime import datetime
 from typing import Any
@@ -16,10 +17,12 @@ CATEGORY_LABELS = {
     "control": "控制接口",
 }
 CATEGORY_ORDER = {"sensor": 0, "algorithm": 1, "control": 2}
+DEFAULT_RPC_TIMEOUT_SEC = 2.0
+ACTION_RPC_TIMEOUT_SEC = 120.0
 
 
 class RemoteAgentClient:
-    def __init__(self, host: ClusterHostConfig, timeout: float = 2.0) -> None:
+    def __init__(self, host: ClusterHostConfig, timeout: float = DEFAULT_RPC_TIMEOUT_SEC) -> None:
         if not host.base_url:
             raise ValueError(f"remote host {host.id} missing base_url")
         self.host = host
@@ -27,12 +30,23 @@ class RemoteAgentClient:
         self.timeout = timeout
 
     async def get(self, path: str) -> Any:
-        return await asyncio.to_thread(self._request, "GET", path, None)
+        return await asyncio.to_thread(self._request, "GET", path, None, self.timeout)
 
-    async def post(self, path: str, payload: dict | None = None) -> Any:
-        return await asyncio.to_thread(self._request, "POST", path, payload or {})
+    async def post(
+        self,
+        path: str,
+        payload: dict | None = None,
+        timeout: float | None = None,
+    ) -> Any:
+        return await asyncio.to_thread(
+            self._request,
+            "POST",
+            path,
+            payload or {},
+            timeout if timeout is not None else self.timeout,
+        )
 
-    def _request(self, method: str, path: str, payload: dict | None) -> Any:
+    def _request(self, method: str, path: str, payload: dict | None, timeout: float) -> Any:
         data = None
         headers = {"Content-Type": "application/json"}
         if payload is not None:
@@ -43,8 +57,18 @@ class RemoteAgentClient:
             headers=headers,
             method=method,
         )
-        with urllib.request.urlopen(request, timeout=self.timeout) as response:
-            body = response.read().decode("utf-8")
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                body = response.read().decode("utf-8")
+        except urllib.error.HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="replace")
+            detail = body
+            try:
+                payload = json.loads(body)
+                detail = payload.get("detail") or body
+            except json.JSONDecodeError:
+                pass
+            raise RuntimeError(f"remote {self.host.id} {method} {path} failed {exc.code}: {detail}") from exc
         return json.loads(body) if body else {}
 
 
@@ -303,7 +327,11 @@ class ClusterManager:
             if host_id == self.self_host_id:
                 await self.local.start_many(ids)
             else:
-                await self.remote_clients[host_id].post("/api/start-selected", {"modules": ids})
+                await self.remote_clients[host_id].post(
+                    "/api/start-selected",
+                    {"modules": ids},
+                    timeout=ACTION_RPC_TIMEOUT_SEC,
+                )
 
     async def stop_many(self, module_ids: list[str]) -> None:
         if not self.cluster_active():
@@ -314,7 +342,11 @@ class ClusterManager:
             if host_id == self.self_host_id:
                 await self.local.stop_many(ids)
             else:
-                await self.remote_clients[host_id].post("/api/stop-selected", {"modules": ids})
+                await self.remote_clients[host_id].post(
+                    "/api/stop-selected",
+                    {"modules": ids},
+                    timeout=ACTION_RPC_TIMEOUT_SEC,
+                )
 
     async def start_module(self, module_id: str) -> dict:
         if not self.cluster_active():
@@ -324,7 +356,10 @@ class ClusterManager:
         if host_id == self.self_host_id:
             await self.local.start_many([raw_id])
             return self.local.get_state(raw_id)
-        state = await self.remote_clients[host_id].post(f"/api/modules/{raw_id}/start")
+        state = await self.remote_clients[host_id].post(
+            f"/api/modules/{raw_id}/start",
+            timeout=ACTION_RPC_TIMEOUT_SEC,
+        )
         return self._prefix_module(host_id, self._host_name(host_id), state)
 
     async def stop_module(self, module_id: str) -> dict:
@@ -333,7 +368,10 @@ class ClusterManager:
         host_id, raw_id = self._split_module_id(module_id)
         if host_id == self.self_host_id:
             return await self.local.stop(raw_id)
-        state = await self.remote_clients[host_id].post(f"/api/modules/{raw_id}/stop")
+        state = await self.remote_clients[host_id].post(
+            f"/api/modules/{raw_id}/stop",
+            timeout=ACTION_RPC_TIMEOUT_SEC,
+        )
         return self._prefix_module(host_id, self._host_name(host_id), state)
 
     async def restart_module(self, module_id: str) -> dict:
@@ -346,7 +384,10 @@ class ClusterManager:
             await self.local.stop(raw_id)
             await self.local.start_many([raw_id])
             return self.local.get_state(raw_id)
-        state = await self.remote_clients[host_id].post(f"/api/modules/{raw_id}/restart")
+        state = await self.remote_clients[host_id].post(
+            f"/api/modules/{raw_id}/restart",
+            timeout=ACTION_RPC_TIMEOUT_SEC,
+        )
         return self._prefix_module(host_id, self._host_name(host_id), state)
 
     async def start_category(self, category_key: str) -> None:
@@ -357,7 +398,10 @@ class ClusterManager:
         if host_id == self.self_host_id:
             await self.local.start_category(category)
         else:
-            await self.remote_clients[host_id].post(f"/api/categories/{category}/start")
+            await self.remote_clients[host_id].post(
+                f"/api/categories/{category}/start",
+                timeout=ACTION_RPC_TIMEOUT_SEC,
+            )
 
     async def stop_category(self, category_key: str) -> None:
         if not self.cluster_active():
@@ -367,7 +411,10 @@ class ClusterManager:
         if host_id == self.self_host_id:
             await self.local.stop_category(category)
         else:
-            await self.remote_clients[host_id].post(f"/api/categories/{category}/stop")
+            await self.remote_clients[host_id].post(
+                f"/api/categories/{category}/stop",
+                timeout=ACTION_RPC_TIMEOUT_SEC,
+            )
 
     def _prefix_module(self, host_id: str, host_name: str, item: dict) -> dict:
         raw_id = item["id"]
